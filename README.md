@@ -32,7 +32,7 @@ Forked from [umiiii/er-apex](https://github.com/umiiii/er-apex). On top of it:
 - **Targets**: every character but the player's side (teams 1, 2, 8, 12; ini `friendly_teams`) can be hit, as in ELDEN RING: dogs, birds, invaders, dragons and bosses too.
 - **Movement**: the ground's collision is read again every second and a fall into the ground is caught (late-loaded map tiles); on a lift, up or down, the game carries the player until it stops.
 - **Pathfinder's grapple**: the weapon wheel (hold Tab) also picks Q's ability, the stim or the grapple. With the grapple, Q fires the hook (out to 850 units, about 21 m) and it pulls you in with Apex's own numbers (speed ramping 50 to 800 over 1.5 s, 1500 acceleration, lighter gravity on the way up, a boost when it lets go); Space, Q again, reaching the hook or slowing down lets go. No cooldown. Its sounds are Apex's; a cable is drawn to the hook (no first-person animation yet).
-- **Kill-streak badge** (top right, where Apex shows your rank): kills in the last minute, 0-3 D1, 4-10 M1, above 10 P1. The badges are your own pictures: put `D1.png`, `M1.png` and `P1.png` in `apex-data\hud\rank\` (without them nothing shows).
+- **Kill-streak badge** (top right, where Apex shows your rank): kills in the last minute, 0-3 D1, 4-10 M1, above 10 P1. The badges are Apex's own Diamond, Master and Apex Predator rank emblems, exported from your install (step 8, `tools/apexhud/export_rank.py`); your own `D1.png`, `M1.png` and `P1.png` in `apex-data\hud\rank\` are used instead when they are there.
 - **Kill feed names**: a monster shows its kind's name from the game (its spirit ashes' name, in the game's language) where the game has one, else its Chinese community name (`tools/apexhud/monster_names_zhocn.json`, by its Paramdex name), else that English name; only then "enemy".
 - **Hit sound**: the first hit that hurts an enemy plays Apex's armour-break shatter, once per enemy (`--set hits`).
 - **Charge Rifle sounds** stop with the shot: no firing sound after a cancel, no loop when a beam hits flesh.
@@ -286,6 +286,7 @@ python tools/apexhud/export_wingman.py --legend octane --weapon flatline
 python tools/apexhud/export_wingman.py --legend octane --weapon sentinel
 python tools/apexhud/export_wingman.py --legend octane --weapon kunai
 python tools/apexhud/export_wingman.py --legend octane --weapon grapple
+python tools/apexhud/export_rank.py --legend octane    # the streak badge: Apex's rank emblems
 python tools/apexhud/custom_font.py                   # only with fonts in apex-data\fonts: -> apex-data\hud\custom_font
 ```
 

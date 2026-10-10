@@ -654,8 +654,8 @@ fn dots(p: &Pen, poly: &[[f32; 2]], col: [f32; 4]) {
     }
 }
 
-/// The streak badges, Apex's rank emblems in the user's own pictures (`rank/<name>.png` in or beside
-/// `hud_dir`).
+/// The streak badges: Apex's Diamond, Master and Apex Predator rank emblems (`<hud_dir>/rank/<name>.png`,
+/// tools/apexhud/export_rank.py), or your own pictures (`rank/<name>.png` beside `hud_dir`).
 pub const RANK_BADGES: [&str; 3] = ["D1", "M1", "P1"];
 
 /// Top right, where Apex shows the ranked badge (the user's 2026-10-10 ask, sized and placed after

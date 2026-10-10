@@ -32,7 +32,7 @@
 - **敌人判定**：除玩家一方（阵营 1、2、8、12，可用 ini `friendly_teams` 改）外所有角色都能被击中，和原版一样，狗、乌鸦、入侵者、龙和 Boss 都算。
 - **移动**：每秒重读地面碰撞，下落中陷进地面时拉回，避免远处地图晚加载时穿地；坐电梯上下时由游戏接管，直到电梯停稳。
 - **探路者钩爪**：武器轮盘（按住 Tab）里也能选 Q 技能：兴奋剂或钩爪。选钩爪时按 Q 射出钩子（最远 850 单位，约 21 米），按 Apex 原版参数把你拉过去（速度 1.5 秒内从 50 升到 800、加速度 1500、往上拉时重力变轻、脱钩时补一点向上的速度）；按空格、再按 Q、到达钩点或速度太慢时脱钩。无冷却，用 Apex 原版音效，画出钩索（暂时没有第一人称手部动作）。
-- **连杀段位徽章**（右上角，Apex 显示段位的位置）：最近 1 分钟内击杀 0~3 显示 D1，4~10 显示 M1，超过 10 显示 P1。徽章图片需要自己准备：把 `D1.png`、`M1.png`、`P1.png` 放进 `apex-data\hud\rank\`（没有就不显示）。
+- **连杀段位徽章**（右上角，Apex 显示段位的位置）：最近 1 分钟内击杀 0~3 显示 D1，4~10 显示 M1，超过 10 显示 P1。徽章用的是 Apex 游戏内的钻石、大师、Apex 猎杀者段位标，在第 8 步从本机游戏里解包（`tools/apexhud/export_rank.py`）；如果 `apex-data\hud\rank\` 里放了自己的 `D1.png`、`M1.png`、`P1.png`，就优先用自己的。
 - **击杀栏名字**：怪物显示游戏里这一类怪的名字（取自同种骨灰的中文名），游戏里没有的用社区通俗叫法（`tools/apexhud/monster_names_zhocn.json`，按 Paramdex 英文名对照），对照表里也没有的用英文名，都没有才显示“敌人”。
 - **命中音效**：第一次打中某个敌人并造成伤害时播放 Apex 的碎甲音效，每个敌人只播一次（`--set hits`）。
 - **Charge Rifle 音效**随射击结束而停：打断后不再有开火声，光束打到怪物身上也不会循环。
@@ -286,6 +286,7 @@ python tools/apexhud/export_wingman.py --legend octane --weapon flatline
 python tools/apexhud/export_wingman.py --legend octane --weapon sentinel
 python tools/apexhud/export_wingman.py --legend octane --weapon kunai
 python tools/apexhud/export_wingman.py --legend octane --weapon grapple
+python tools/apexhud/export_rank.py --legend octane    # 连杀徽章：Apex 的段位标
 python tools/apexhud/custom_font.py                   # 仅当 apex-data\fonts 里有字体：→ apex-data\hud\custom_font
 ```
 

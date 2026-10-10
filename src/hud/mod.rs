@@ -234,12 +234,14 @@ fn load_pack() {
                         None => log(format!("hud: {name} not in the pack (re-export with tools/apexhud)")),
                     }
                 }
-                // the streak badges (apex.rs `streak_badge`): the user's own pictures, in `rank` in the
-                // pack's folder or beside it (apex-data/hud/rank: a re-export leaves them be)
+                // the streak badges (apex.rs `streak_badge`): your own pictures in `rank` beside the
+                // pack's folder (apex-data/hud/rank), else Apex's rank emblems that
+                // tools/apexhud/export_rank.py put in the pack's own `rank`
                 for name in apex::RANK_BADGES {
                     let file = format!("{name}.png");
                     let inside = dir.join("rank").join(&file);
-                    let path = if inside.is_file() { inside } else { dir.parent().map_or(inside, |d| d.join("rank").join(&file)) };
+                    let own = dir.parent().map(|d| d.join("rank").join(&file)).filter(|p| p.is_file());
+                    let path = own.unwrap_or(inside);
                     if path.is_file() {
                         images.push((name.to_string(), path, tex::Kind::Color));
                     } else {
