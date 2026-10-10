@@ -123,6 +123,12 @@ function Install-Legend {
         if ((Test-Path $weaponsAnim) -and @(Get-ChildItem "$weaponsPov\parts" -Filter '*_m_0998*' -ErrorAction SilentlyContinue).Count -eq 8) {
             $pov = $weaponsPov; $anim = $weaponsAnim
         }
+        # the Wingman in the R-301's place (tools/apexpov/bake_wingman.py, tools/fusepov/build_wingman.py):
+        # the pistol in 998's body piece, its clips in the pack (group 9)
+        $wingmanPov = "$Root\er-data\s3\octane_pov_wingman\package"; $wingmanAnim = "$Root\apex-data\pov\octane_wingman\fuse_pov.anim"
+        if ((Test-Path $wingmanAnim) -and @(Get-ChildItem "$wingmanPov\parts" -Filter '*_m_0998*' -ErrorAction SilentlyContinue).Count -eq 8) {
+            $pov = $wingmanPov; $anim = $wingmanAnim
+        }
     }
     $body = $bodies | Where-Object { @(Get-ChildItem "$_\parts" -Filter '*_m_0999*' -ErrorAction SilentlyContinue).Count -eq 8 } | Select-Object -First 1
     if (-not $body) { $body = $bodies[-1] }

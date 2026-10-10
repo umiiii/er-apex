@@ -1,6 +1,6 @@
 #[path = "../examples/support/mod.rs"]
 mod support;
-use er_apex_move::{Controller, LedgeKind, MoveInput, MoveParams, Pose, Vec3, World, FIXED_DT};
+use er_apex_move::{Controller, LedgeKind, MoveInput, MoveParams, Pose, Triangle, Vec3, World, FIXED_DT};
 use support::*;
 
 fn forward() -> MoveInput {
@@ -319,6 +319,56 @@ fn step_22_works_30_blocks() {
                 "30 step unexpectedly climbed: {:?}",
                 c.state
             );
+        }
+    }
+}
+
+/// Stairs with treads narrower than the capsule (Elden Ring's: ~0.22 m rise, ~0.3 m tread, in raw
+/// units 9 and 12 against a radius of 16): the capsule's round bottom meets each stair's nose, a
+/// slanted contact that must be stepped over, not ridden up (the feet caught on every step,
+/// 2026-10-10).
+fn stairs(rise: f32, tread: f32, n: usize) -> Vec<Triangle> {
+    let x0 = 100.0;
+    let mut t = quad(
+        Vec3::new(-1000.0, 0.0, -5000.0),
+        Vec3::new(x0, 0.0, -5000.0),
+        Vec3::new(x0, 0.0, 5000.0),
+        Vec3::new(-1000.0, 0.0, 5000.0),
+    );
+    for i in 0..n {
+        let (x, y) = (x0 + i as f32 * tread, i as f32 * rise);
+        t.extend(quad(
+            Vec3::new(x, y, -5000.0),
+            Vec3::new(x, y + rise, -5000.0),
+            Vec3::new(x, y + rise, 5000.0),
+            Vec3::new(x, y, 5000.0),
+        ));
+        let end = if i + 1 == n { x + 10000.0 } else { x + tread };
+        t.extend(quad(
+            Vec3::new(x, y + rise, -5000.0),
+            Vec3::new(end, y + rise, -5000.0),
+            Vec3::new(end, y + rise, 5000.0),
+            Vec3::new(x, y + rise, 5000.0),
+        ));
+    }
+    t
+}
+
+#[test]
+fn narrow_stairs_climb_without_catching() {
+    // Elden Ring-like stairs (0.22-0.3 m rise, 0.3 m tread), walking and sprinting, straight on and
+    // at an angle: up to the top and on (all of these stopped on a step before the edge fix)
+    for (rise, tread) in [(9.0, 12.0), (12.0, 18.0), (9.0, 6.0), (15.0, 12.0)] {
+        for (sprint, angle) in [(false, 0.0f32), (true, 0.0), (true, 30.0)] {
+            let n = 10;
+            let mut c = controller(&stairs(rise, tread, n), Vec3::new(50.0, 0.0, 0.0));
+            let a = angle.to_radians();
+            let dir = Vec3::new(a.cos(), 0.0, a.sin());
+            let input = MoveInput { wish: dir, forward: dir, sprint, ..Default::default() };
+            frames(&mut c, input, 600);
+            let top = rise * n as f32;
+            assert!((c.state.position.y - top).abs() < 0.5, "stairs {rise}x{tread} sprint {sprint} angle {angle}: {:?}", c.state);
+            assert!(c.state.position.x > 100.0 + tread * n as f32 + 50.0, "stairs {rise}x{tread}: {:?}", c.state);
         }
     }
 }
@@ -769,4 +819,37 @@ fn wedge_between_wall_and_steep_slope() {
         "could not jump out: {:?}",
         c.state.position
     );
+}
+
+
+/// Small lumps on a floor (Elden Ring's bones and rocks): a ridge across the way, `h` high, its
+/// sides `slope` degrees steep, with a rough top (a peak).
+fn lump(h: f32, slope_deg: f32, x: f32) -> Vec<Triangle> {
+    let run = h / slope_deg.to_radians().tan();
+    let (a, b, c) = (x - run, x, x + run);
+    let mut t = Vec::new();
+    for z in [-5000.0f32] {
+        let z2 = 5000.0;
+        t.extend(quad(Vec3::new(a, 0.0, z), Vec3::new(b, h, z), Vec3::new(b, h, z2), Vec3::new(a, 0.0, z2)));
+        t.extend(quad(Vec3::new(b, h, z), Vec3::new(c, 0.0, z), Vec3::new(c, 0.0, z2), Vec3::new(b, h, z2)));
+    }
+    t
+}
+
+#[test]
+fn small_lumps_do_not_stop_the_feet() {
+    // bones and stones, 5 cm to half a metre, steep-sided, crested: walked and sprinted over (all
+    // of these stopped him dead before, 2026-10-10)
+    for sprint in [false, true] {
+        for h in [2.0f32, 6.0, 12.0, 20.0] {
+            for slope in [55.0f32, 75.0, 85.0] {
+                let mut t = floor(0.0);
+                t.extend(lump(h, slope, 150.0));
+                let mut c = controller(&t, Vec3::new(50.0, 0.0, 0.0));
+                let input = MoveInput { wish: Vec3::x(), forward: Vec3::x(), sprint, ..Default::default() };
+                frames(&mut c, input, 240);
+                assert!(c.state.position.x > 250.0, "lump {h} at {slope} deg, sprint {sprint}: {:?}", c.state);
+            }
+        }
+    }
 }

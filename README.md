@@ -6,12 +6,51 @@ An offline fan mod for ELDEN RING: play as Octane from Apex Legends. A Rust DLL 
 
 **This repository ships no game files and no game assets**: no models, textures, animations, sounds, HUD images or text from Apex Legends or ELDEN RING. You make them yourself from your own game installs with the converters in this repository's `tools/` (see [Building](#building)). You must give the Apex Legends install folder yourself.
 
+## What this fork changes
+
+Forked from [umiiii/er-apex](https://github.com/umiiii/er-apex). On top of it:
+
+**Weapons**
+
+- **Six guns**: the Wingman (in hand at the start), the R-99, the R-301, the VK-47 Flatline, the Sentinel and the Charge Rifle.
+- **Sentinel** (changed on purpose): automatic, a shot every 0.8 s with Apex's bolt action, 7 rounds, a round back into the magazine every 0.4 s (no reload), the amped shot's sound, every hit a headshot (70 x 1.8, the kill feed's headshot mark), and **homing rounds**: with an enemy in a cone straight ahead (60 m, 30° each side; the crosshair does not move), a shot is a glowing round that flies from the muzzle, curves after the enemy and hits it when it gets there (ini `homing`, `homing_range`, `homing_angle`, `homing_height`, `homing_speed`; the defaults are at the top of `src/spike/homing.rs`). Their first-person models, animations, sounds and HUD icons are all exported from your Apex install by `export-assets.ps1` step 8.
+- **Weapon wheel**: hold Tab, turn the view (or press 1-3) to pick a gun, let go to switch. Key 2 is still the Charge Rifle.
+- **Default models and textures**: every gun uses its default model and textures, which every Apex install has. The R-99's Cutting Edge and the Flatline's Teal Zeal models are opt-in (`export-assets.ps1 -SkinModels`), and so are the skins below.
+- **Inspect**: key 5 plays the inspect of the gun in hand, with its sounds; a shot, aiming, a reload, a switch, sprint or an ability cuts it.
+- **Holstered mode**: key 3 puts the gun away and takes out Wraith's heirloom kunai (its first-person model and animations from your Apex install); you run a little faster (×1.1, ini `holster_speed`), the left mouse button swings it (30 damage up to 2 m), 5 plays its inspect (all with the kunai's sounds), and 3 again (or 1 / 2) brings the gun back. The HUD stays as it was.
+- **Wingman**: semi-auto, 8 rounds, 50 a shot, head ×1.5, reload 2.1 s, zoom 60°, Apex's view kick. **Charge Rifle**: 8 rounds.
+- **Custom skins (optional)**: put your own textures in `apex-data\skins\` and step 8 uses them (see [Weapon skins](#weapon-skins-optional)). No skin textures are in the repository.
+
+**HUD fonts (optional)**
+
+- Put your own `.ttf` / `.otf` files in `apex-data\fonts\` and the HUD draws its digits and English letters with them (everything else, Chinese included, stays in Apex's font). By default every text uses `Apex Regular` if it is there, else the first font; ini `hud_font_body`, `hud_font_numeric`, `hud_font_bold` (the file name without extension, lower case, or `off`) pick per face, `hud_font = off` turns them off. Make the atlas with `pwsh export-assets.ps1` (step 8) or `python tools/apexhud/custom_font.py`. No font files are in the repository.
+
+**Playing**
+
+- **F5**: back to your own ELDEN RING character, with the game's own movement and collision, camera, HUD, armour and weapons; the mod's guns, abilities and HUD are off. F5 again: Octane.
+- **Keyboard and mouse prompts**: by default the game sees no controller, so its button prompts are keyboard and mouse. To play with a controller: `pwsh play.ps1 -Pad`.
+- **Targets**: every character but the player's side (teams 1, 2, 8, 12; ini `friendly_teams`) can be hit, as in ELDEN RING: dogs, birds, invaders, dragons and bosses too.
+- **Movement**: the ground's collision is read again every second and a fall into the ground is caught (late-loaded map tiles); on a lift, up or down, the game carries the player until it stops.
+- **Pathfinder's grapple**: the weapon wheel (hold Tab) also picks Q's ability, the stim or the grapple. With the grapple, Q fires the hook (out to 850 units, about 21 m) and it pulls you in with Apex's own numbers (speed ramping 50 to 800 over 1.5 s, 1500 acceleration, lighter gravity on the way up, a boost when it lets go); Space, Q again, reaching the hook or slowing down lets go. No cooldown. Its sounds are Apex's; a cable is drawn to the hook (no first-person animation yet).
+- **Kill-streak badge** (top right, where Apex shows your rank): kills in the last minute, 0-3 D1, 4-10 M1, above 10 P1. The badges are your own pictures: put `D1.png`, `M1.png` and `P1.png` in `apex-data\hud\rank\` (without them nothing shows).
+- **Kill feed names**: a monster shows its kind's name from the game (its spirit ashes' name, in the game's language) where the game has one, else its Chinese community name (`tools/apexhud/monster_names_zhocn.json`, by its Paramdex name), else that English name; only then "enemy".
+- **Hit sound**: the first hit that hurts an enemy plays Apex's armour-break shatter, once per enemy (`--set hits`).
+- **Charge Rifle sounds** stop with the shot: no firing sound after a cancel, no loop when a beam hits flesh.
+- **Settings**: `pwsh play.ps1 -Fov 90 -FpsLimit 120 -PlayerName "name" -Pad`. Field of view 90 by default; the game's 60 FPS by default; the HUD name from `-PlayerName` or `ER_APEX_PLAYER_NAME`, else the save's character.
+
+**Setting up**
+
+- **No DLC needed**: without Shadow of the Erdtree, `erextract` skips `DLC.bhd`.
+- `export-assets.ps1` has eight steps (step 8: the Wingman, the R-99, the kunai and the skins); run it once as below.
+
+Known limits: the third-person body still holds the R-301; the Wingman's hammer does not move on its own; emissive textures are not used.
+
 ## Fastest start
 
 Copy this to any agent:
 
 ```markdown
-Help me get https://github.com/umiiii/er-apex up and running
+Help me get https://github.com/MegaWeed/er-apex up and running
 ```
 
 ## Getting started
@@ -57,8 +96,9 @@ pwsh export-assets.ps1
 ```
 
 - It asks for the Apex Legends install folder (with `paks\Win64`) and ELDEN RING's `Game` folder (with `eldenring.exe`). It finds them through Steam when it can and shows them as the default: press Enter to take it. The folders are only read, never written.
-- It checks the tool chain, then runs the seven steps of [Making the game assets](#making-the-game-assets-apex-data-er-data) in order: about an hour. Step 4 starts the game once for about a minute to read the player skeleton; leave the game window alone until it quits.
-- A command whose outputs are already there is skipped, so after a failure fix the cause and run the script again: it goes on where it stopped. A command that was cut off runs again from the start. To make everything again: `-Force`; only steps 5 to 7: `-From 5 -Force`. No questions: `-ApexDir <folder> -EldenRingDir <folder>`. No test area (no soldiers to shoot): `-NoArena`.
+- It checks the tool chain, then runs the eight steps of [Making the game assets](#making-the-game-assets-apex-data-er-data) in order: about 70 minutes. Step 4 starts the game once for about a minute to read the player skeleton; leave the game window alone until it quits.
+- A command whose outputs are already there is skipped, so after a failure fix the cause and run the script again: it goes on where it stopped. A command that was cut off runs again from the start. To make everything again: `-Force`; only steps 5 to 8: `-From 5 -Force`.
+- Weapon skins are optional: put them in `apex-data\skins\` before this step, or later (see [Weapon skins](#weapon-skins-optional)). No questions: `-ApexDir <folder> -EldenRingDir <folder>`. No test area (no soldiers to shoot): `-NoArena`.
 
 ### 3. Play
 
@@ -66,11 +106,12 @@ pwsh export-assets.ps1
 pwsh play.ps1
 ```
 
-- It backs up the test save to `scratch\saves`, installs the mod into `scratch\mod` and starts the game offline through me3, in a 1920×1080 window. The game skips the title screen and continues the test save's last character at the grace "The First Step" in Limgrave: Octane in first person, R-301 in hand, three soldiers next to the grace as targets.
+- It backs up the test save to `scratch\saves`, installs the mod into `scratch\mod` and starts the game offline through me3, in a 1920×1080 window. The game skips the title screen and continues the test save's last character at the grace "The First Step" in Limgrave: Octane in first person, Wingman in hand, three soldiers next to the grace as targets.
 - The test save `ER0000_fuse.sl2` needs at least one character. me3 copies it from your normal save the first time it starts the game.
-- **Click the game window** to play with keyboard and mouse.
-- **F5** switches back to the Elden Ring character (the game's own movement and collision, camera, HUD, armour and weapons; the mod's guns and abilities are off). F5 again: Octane.
-- By default gun damage is ×3 and the Jump Pad has no cooldown; `-Season3` uses the Season 3 values. `-NoSpawn`: no soldiers.
+- **Click the game window** to play with keyboard and mouse. The game sees no controller unless you start it with `-Pad`.
+- Keys: WASD, Space jump, Shift sprint, Ctrl crouch / slide; left mouse fire, right mouse aim, R reload; hold Tab for the weapon wheel (or 1-3), 2 the Charge Rifle, 3 the holstered mode (the kunai), 5 inspect; Q stim, Z jump pad, 4 shield battery, G frag grenade; **F5** your own ELDEN RING character and back.
+- Options: `-Fov 90` (70-110), `-FpsLimit 120` (default: the game's 60), `-PlayerName "name"` (the HUD's name), `-Pad` (controller).
+- By default gun damage is ×3 (not the Charge Rifle's: it keeps its own) and the Jump Pad has no cooldown; `-Season3` uses the Season 3 values. `-NoSpawn`: no soldiers.
 - More soldiers: `pwsh tools/dev/game.ps1 spawn`. A friendly NPC stands about 10.5 m from the grace; do not shoot it. Back to the grace: `pwsh tools/dev/game.ps1 cmd "warp 1042361951"`. Quit: `pwsh tools/dev/game.ps1 stop`.
 
 ## Building
@@ -220,7 +261,65 @@ python tools/fusemesh/convert_fuse.py --geometry-only   # skeleton alignment onl
 python tools/retarget/bake_er_anim.py fuse_idle_rifle_ADS   # -> er-data\s4\fuse_er.anim
 ```
 
-Then start the game with `pwsh play.ps1`. `game.ps1 install -Legend octane` takes the last stage of each chain: 999 from `octane_gun`; 998, the material bundle and the animation pack from `octane_pov_weapons` / `octane_weapons`; plus the base pose `fuse_er.anim` and the ground jump pad `padworld.json`. When a stage is incomplete, it uses the stage before it.
+**8. The Wingman, the R-99, the Flatline, the Sentinel and the kunai (about 20 min; this fork)**
+
+The Wingman, the R-99, the Flatline, the Sentinel and Wraith's heirloom kunai, from your Apex install like the steps before, with their default models. `build_wingman.py` adds them to model 998 and its animation pack, on top of step 6's `octane_pov_weapons` stage, and takes the optional skins.
+
+```powershell
+python tools/apexassets/wingman_assets.py
+python tools/apexassets/r99_assets.py
+python tools/apexassets/flatline_base_assets.py       # VK-47 Flatline (flatline_base_v)
+python tools/apexassets/kunai_assets.py               # Wraith's heirloom kunai (heirloom_wraith_v18_kunai_v)
+python tools/apexassets/sentinel_assets.py            # Sentinel (sentinel_base_v)
+python tools/apexpov/bake_wingman.py                  # -> apex-data\pov\octane_wingman\fuse_pov.anim
+python tools/fusepov/build_wingman.py                 # -> er-data\s3\octane_pov_wingman (model 998); skins: see below
+python tools/fuseaudio/export_audio.py --set wingman
+python tools/fuseaudio/export_audio.py --set r99
+python tools/fuseaudio/export_audio.py --set kunai
+python tools/fuseaudio/export_audio.py --set flatline
+python tools/fuseaudio/export_audio.py --set sentinel
+python tools/fuseaudio/export_audio.py --set hits
+python tools/fuseaudio/export_audio.py --set grapple
+python tools/apexhud/export_wingman.py --legend octane
+python tools/apexhud/export_wingman.py --legend octane --weapon r99
+python tools/apexhud/export_wingman.py --legend octane --weapon flatline
+python tools/apexhud/export_wingman.py --legend octane --weapon sentinel
+python tools/apexhud/export_wingman.py --legend octane --weapon kunai
+python tools/apexhud/export_wingman.py --legend octane --weapon grapple
+python tools/apexhud/custom_font.py                   # only with fonts in apex-data\fonts: -> apex-data\hud\custom_font
+```
+
+#### Skin models (optional)
+
+`pwsh export-assets.ps1 -SkinModels` uses the R-99's Cutting Edge model (`r99_react_v20_ascension_v`) and the Flatline's Teal Zeal model (`flatline_v20_trshunter_v`) instead of the default ones, and makes the animation pack and model 998 again; run it without `-SkinModels` to go back. By hand: export them too and set `ERAPEX_SKIN_MODELS=1` for `bake_wingman.py` and `build_wingman.py`:
+
+```powershell
+python tools/apexassets/r99_ascension_assets.py
+python tools/apexassets/flatline_assets.py
+$env:ERAPEX_SKIN_MODELS = '1'
+python tools/apexpov/bake_wingman.py
+python tools/fusepov/build_wingman.py
+```
+
+#### Weapon skins (optional)
+
+Each folder you put in `apex-data\skins\` replaces that gun's textures (any other folder: `export-assets.ps1 -Skins <folder>`):
+
+| Folder | Files | Replaces |
+|---|---|---|
+| `apex-data\skins\wingman\` | `Wingman_Default_col.dds` (optional `_spc`, `_nml`, `_gls`; `.png` works too) | the Wingman's base material |
+| `apex-data\skins\chargerifle\` | `col\`, `nml\`, `gls\`, each with `.dds` files in several sizes such as `1024.dds`, `2048.dds`; the largest is used | the Charge Rifle's main material |
+| `apex-data\skins\r99\` | `<size> COL SPC.dds`, such as `2048 COL SPC.dds`; the largest is used | the R-99's albedo and specular (Cutting Edge model: with `-SkinModels` only) |
+| `apex-data\skins\flatline\` | `*COL*.dds` and `*SPC*.dds` (optional `*AO*.dds`, its glow); the largest is used | the Flatline's albedo and specular (Teal Zeal model: with `-SkinModels` only) |
+| `apex-data\skins\kunai\` | `*_col.dds` and `*_spc.dds` (in subfolders too, such as `1024\P2020_Default_col.dds`); the largest is used | the kunai's albedo and specular |
+
+Run `pwsh export-assets.ps1` again after adding, changing or removing a skin folder: step 8 notices that the set of skins changed and makes model 998 again; the rest is skipped. By hand:
+
+```powershell
+python tools/fusepov/build_wingman.py --skin apex-data\skins\wingman --cr-skin apex-data\skins\chargerifle --kunai-skin apex-data\skins\kunai
+```
+
+Then start the game with `pwsh play.ps1`. `game.ps1 install -Legend octane` takes the last stage of each chain: 999 from `octane_gun`; 998, the material bundle and the animation pack from `octane_pov_wingman` (else `octane_pov_weapons` / `octane_weapons`); plus the base pose `fuse_er.anim` and the ground jump pad `padworld.json`. When a stage is incomplete, it uses the stage before it.
 
 Most of `apex-data` and `er-data` is intermediate data. The game reads about 490 MB of it: models about 147 MB, animation pack about 61 MB, HUD about 45 MB, sounds about 235 MB.
 

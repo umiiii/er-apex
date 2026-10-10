@@ -1,18 +1,13 @@
 <#
 Make the game assets (apex-data\, er-data\) from your own Apex Legends and ELDEN RING installs.
 Asks for the two game folders (found through Steam when it can), checks the tool chain, then runs
-the eight steps in order (about 70 minutes, about 45 GB). Step 4 starts the game once.
+the seven steps in order (about an hour, about 45 GB). Step 4 starts the game once.
 
   pwsh export-assets.ps1                              ask for the folders, run all steps
   pwsh export-assets.ps1 -ApexDir <dir> -EldenRingDir <dir>   no questions
   pwsh export-assets.ps1 -NoArena                     no test area (game.ps1 spawn then does nothing)
   pwsh export-assets.ps1 -Force                       make everything again, even what is already there
-  pwsh export-assets.ps1 -From 5 -Force               make steps 5 to 8 again
-  pwsh export-assets.ps1 -SkinModels                  the R-99's Cutting Edge and the Flatline's Teal Zeal models
-                                                      instead of the default ones (their skins need them)
-  pwsh export-assets.ps1 -Skins <dir>                 weapon skins (default apex-data\skins): <dir>\wingman,
-                                                      <dir>\chargerifle, <dir>\r99, <dir>\kunai; step 8 makes model 998
-                                                      again when the set of skins changes
+  pwsh export-assets.ps1 -From 5 -Force               make steps 5 to 7 again
 
 A command whose outputs are already there is skipped, so after a failure just run it again.
 
@@ -22,9 +17,8 @@ param(
     [string]$ApexDir,
     [string]$EldenRingDir,
     [ValidateRange(1, 8)][int]$From = 1,
+    [ValidateRange(1, 8)][int]$To = 7,
     [switch]$NoArena,
-    [string]$Skins = 'apex-data\skins',
-    [switch]$SkinModels,
     [switch]$Force
 )
 $ErrorActionPreference = 'Stop'
@@ -135,7 +129,7 @@ function Run {
 }
 
 function Step([int]$n, [string]$name, [scriptblock]$body) {
-    if ($n -lt $From) { return }
+    if ($n -lt $From -or $n -gt $To) { return }
     $t0 = Get-Date
     Write-Host "`n== step $n/8: $name ==" -ForegroundColor Cyan
     try { & $body } catch { Write-Host "step $n failed; fix the cause and run export-assets.ps1 again" -ForegroundColor Red; throw }
@@ -243,62 +237,17 @@ Step 7 'first-person base pose (about 1 min)' {
     Run 'er-data\s4\fuse_er.anim' python tools/retarget/bake_er_anim.py fuse_idle_rifle_ADS
 }
 
-Step 8 'the Wingman, the R-99, the Flatline, the Sentinel and the kunai (about 20 min)' {
+Step 8 'the Wingman and the R-99 (about 8 min)' {
     Run 'apex-data\assets\wingman\verification.json' python tools/apexassets/wingman_assets.py
     Run 'apex-data\assets\r99\verification.json' python tools/apexassets/r99_assets.py
-    Run 'apex-data\assets\flatline_base\verification.json' python tools/apexassets/flatline_base_assets.py
-    # the default models unless -SkinModels (then also the R-99's Cutting Edge, the Flatline's Teal Zeal)
-    $env:ERAPEX_SKIN_MODELS = if ($SkinModels) { '1' } else { '0' }
-    if ($SkinModels) {
-        Run 'apex-data\assets\r99_ascension\verification.json' python tools/apexassets/r99_ascension_assets.py
-        Run 'apex-data\assets\flatline\verification.json' python tools/apexassets/flatline_assets.py
-    }
-    Run 'apex-data\assets\kunai\verification.json' python tools/apexassets/kunai_assets.py
-    Run 'apex-data\assets\sentinel\verification.json' python tools/apexassets/sentinel_assets.py
-    # (its last output: the Sentinel's table, so a pack baked before the Sentinel is baked again; the
-    # pack and model 998 are made again when the models change: the mark below)
-    $mark = Join-Path $Root 'er-data\s3\octane_pov_wingman\skins.txt'
-    $models = if ($SkinModels) { 'skin-models' } else { 'default-models' }
-    $had = if (Test-Path $mark) { (Get-Content $mark -Raw).Trim() } else { '' }
-    $baked = Join-Path $Root 'apex-data\pov\octane_wingman\sentinel_sequences.json'
-    if ((Test-Path $baked) -and -not $had.StartsWith($models)) { [IO.File]::Delete($baked) }
-    Run 'apex-data\pov\octane_wingman\sentinel_sequences.json' python tools/apexpov/bake_wingman.py
-    # optional skins (not in git): each folder that is there replaces that weapon's textures; model 998
-    # is made again when the set of skins changes
-    $skinArgs = @()
-    # (the R-99's and the Flatline's fit their skin models only: with -SkinModels)
-    $kinds = @(@('wingman', '--skin'), @('chargerifle', '--cr-skin'), @('kunai', '--kunai-skin'))
-    if ($SkinModels) { $kinds += @(@('r99', '--r99-skin'), @('flatline', '--flatline-skin')) }
-    foreach ($k in $kinds) {
-        $d = Join-Path $Skins $k[0]
-        if (Test-Path (Join-Path $Root $d)) { $skinArgs += $k[1], $d }
-    }
-    $built = 'er-data\s3\octane_pov_wingman\wingman-verification.json'
-    # (the mark names the models and the weapons too: a 998 made before the Sentinel is made again)
-    $want = (@("$models wingman r99 kunai flatline sentinel") + $skinArgs) -join ' '
-    if ($had -ne $want -and (Test-Path (Join-Path $Root $built))) {
-        Write-Host "skins changed ($(if ($skinArgs) { $skinArgs -join ' ' } else { 'none' })): model 998 again" -ForegroundColor DarkGray
-        [IO.File]::Delete((Join-Path $Root $built))
-    }
-    Run $built python tools/fusepov/build_wingman.py @skinArgs
-    Set-Content $mark $want
+    Run 'apex-data\assets\r99_ascension\verification.json' python tools/apexassets/r99_ascension_assets.py
+    Run 'apex-data\pov\octane_wingman\fuse_pov.anim' python tools/apexpov/bake_wingman.py
+    Run 'er-data\s3\octane_pov_wingman\wingman-verification.json' python tools/fusepov/build_wingman.py
     Run 'apex-data\audio\wingman\manifest.json' python tools/fuseaudio/export_audio.py --set wingman
     Run 'apex-data\audio\r99\manifest.json' python tools/fuseaudio/export_audio.py --set r99
-    Run 'apex-data\audio\kunai\manifest.json' python tools/fuseaudio/export_audio.py --set kunai
-    Run 'apex-data\audio\flatline\manifest.json' python tools/fuseaudio/export_audio.py --set flatline
-    Run 'apex-data\audio\sentinel\manifest.json' python tools/fuseaudio/export_audio.py --set sentinel
-    Run 'apex-data\audio\hits\manifest.json' python tools/fuseaudio/export_audio.py --set hits
-    Run 'apex-data\audio\grapple\manifest.json' python tools/fuseaudio/export_audio.py --set grapple
     Run 'apex-data\hud\octane\extra\rui\weapon_icons\r5\weapon_wingman.png' python tools/apexhud/export_wingman.py --legend octane
     Run 'apex-data\hud\octane\extra\rui\weapon_icons\r5\weapon_r97.png' python tools/apexhud/export_wingman.py --legend octane --weapon r99
-    Run 'apex-data\hud\octane\extra\rui\weapon_icons\r5\weapon_flatline.png' python tools/apexhud/export_wingman.py --legend octane --weapon flatline
-    Run 'apex-data\hud\octane\extra\rui\weapon_icons\r5\weapon_sentinel.png' python tools/apexhud/export_wingman.py --legend octane --weapon sentinel
-    Run 'apex-data\hud\octane\extra\rui\menu\buttons\melee_skins\wraith_kunai.png' python tools/apexhud/export_wingman.py --legend octane --weapon kunai
-    Run 'apex-data\hud\octane\extra\rui\hud\tactical_icons\tactical_pathfinder.png' python tools/apexhud/export_wingman.py --legend octane --weapon grapple
-    # optional HUD fonts (not in git): the .ttf/.otf files in apex-data\fonts for the HUD's digits and letters
-    if (Get-ChildItem (Join-Path $Root 'apex-data\fonts') -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.ttf', '.otf' }) {
-        Run 'apex-data\hud\custom_font\meta.json' python tools/apexhud/custom_font.py
-    }
 }
 
 "`nall assets ready ($made made, $skipped already there). Start the game: pwsh play.ps1"
+

@@ -19,6 +19,12 @@ type XInputGetStateFn = unsafe extern "system" fn(u32, *mut XINPUT_STATE) -> u32
 /// The real XInputGetState (or whatever was in the import table before: Steam's overlay hook).
 static ORIGINAL: AtomicUsize = AtomicUsize::new(0);
 const ERROR_SUCCESS: u32 = 0;
+const ERROR_DEVICE_NOT_CONNECTED: u32 = 1167;
+
+fn keyboard_only() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| crate::paths::flag("keyboard_only"))
+}
 
 /// A synthetic pad held until `until`: buttons are added to the real pad's, non-zero sticks and
 /// triggers replace the real ones.
@@ -141,7 +147,7 @@ unsafe extern "system" fn xinput_get_state(index: u32, state: *mut XINPUT_STATE)
         LAST_RC.store(rc, Ordering::Relaxed);
     }
     if index != 0 || state.is_null() {
-        return rc;
+        return if keyboard_only() { ERROR_DEVICE_NOT_CONNECTED } else { rc };
     }
     let s = unsafe { &mut *state };
     if rc == ERROR_SUCCESS {
@@ -160,6 +166,11 @@ unsafe extern "system" fn xinput_get_state(index: u32, state: *mut XINPUT_STATE)
         }
     };
     let Some(p) = synth.or_else(|| VIRTUAL.load(Ordering::Relaxed).then(Synthetic::default)) else {
+        // ini `keyboard_only = 1` (play.ps1 unless -Pad): no pad at all for the game, so its
+        // prompts stay keyboard and mouse (a connected pad, or Steam's, kept them on the pad's)
+        if keyboard_only() {
+            return ERROR_DEVICE_NOT_CONNECTED;
+        }
         if rc == ERROR_SUCCESS {
             take_movement(s);
         }
@@ -226,7 +237,11 @@ pub fn set_virtual(on: bool) {
         Ok(w) if w.window_handle != 0 => {
             let hwnd = HWND(w.window_handle as *mut std::ffi::c_void);
             let ok = unsafe { PostMessageW(Some(hwnd), WM_DEVICECHANGE, WPARAM(DBT_DEVNODES_CHANGED), LPARAM(0)) }.is_ok();
-            log(format!("input: virtual pad {}; device change posted: {ok}", if on { "on" } else { "off" }));
+            log(format!(
+                "input: virtual pad {}; device change posted: {ok}; real pad {}",
+                if on { "on" } else { "off" },
+                if LAST_RC.load(Ordering::Relaxed) == ERROR_SUCCESS { "connected" } else { "none" }
+            ));
         }
         _ => log(format!("input: virtual pad {} (no game window yet)", if on { "on" } else { "off" })),
     }

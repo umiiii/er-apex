@@ -234,8 +234,20 @@ fn load_pack() {
                         None => log(format!("hud: {name} not in the pack (re-export with tools/apexhud)")),
                     }
                 }
+                // the streak badges (apex.rs `streak_badge`): the user's own pictures, in `rank` in the
+                // pack's folder or beside it (apex-data/hud/rank: a re-export leaves them be)
+                for name in apex::RANK_BADGES {
+                    let file = format!("{name}.png");
+                    let inside = dir.join("rank").join(&file);
+                    let path = if inside.is_file() { inside } else { dir.parent().map_or(inside, |d| d.join("rank").join(&file)) };
+                    if path.is_file() {
+                        images.push((name.to_string(), path, tex::Kind::Color));
+                    } else {
+                        log(format!("hud: no {} (the streak badge)", path.display()));
+                    }
+                }
                 tex::load(images);
-                font::load(&p.font.atlas, &p.font.meta, vec![(font::Face::Body, p.font.body), (font::Face::Numeric, p.font.numeric), (font::Face::Bold, p.font.bold)]);
+                font::load(&p.font.atlas, &p.font.meta, vec![(font::Face::Body, p.font.body), (font::Face::Numeric, p.font.numeric), (font::Face::Bold, p.font.bold)], custom_fonts(&dir));
                 Some(p)
             }
             Err(e) => {
@@ -244,6 +256,30 @@ fn load_pack() {
             }
         }
     });
+}
+
+/// Your own fonts for the digits and English letters (tools/apexhud/custom_font.py: an atlas in ini
+/// `hud_font_dir`, default `custom_font` beside the pack's folder): each face's font is ini
+/// `hud_font_body` / `hud_font_numeric` / `hud_font_bold`, else `hud_font`, else "apex regular" (or
+/// the first font); a face set to `off` keeps Apex's, and `hud_font = off` turns them all off.
+fn custom_fonts(pack_dir: &std::path::Path) -> Option<font::Custom> {
+    let ini = |k: &str| crate::paths::config(k).map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty());
+    let all = ini("hud_font");
+    if all.as_deref() == Some("off") {
+        return None;
+    }
+    let dir = crate::paths::config("hud_font_dir").map(std::path::PathBuf::from).unwrap_or_else(|| pack_dir.parent().unwrap_or(pack_dir).join("custom_font"));
+    let (atlas, meta) = (dir.join("atlas.png"), dir.join("meta.json"));
+    let text = std::fs::read_to_string(&meta).ok()?;
+    let doc: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let names: Vec<String> = doc["fonts"].as_array()?.iter().filter_map(|f| f["name"].as_str().map(str::to_string)).collect();
+    let default = all.or_else(|| names.iter().find(|n| *n == "apex regular").or(names.first()).cloned())?;
+    let faces: Vec<(font::Face, String)> = [(font::Face::Body, "hud_font_body"), (font::Face::Numeric, "hud_font_numeric"), (font::Face::Bold, "hud_font_bold")]
+        .into_iter()
+        .map(|(face, key)| (face, ini(key).unwrap_or_else(|| default.clone())))
+        .filter(|(_, n)| n != "off")
+        .collect();
+    Some(font::Custom { atlas, meta, faces })
 }
 
 struct Overlay;
@@ -383,7 +419,7 @@ impl ImguiRenderLoop for Overlay {
                 let x = size[0] - 300.0 * s;
                 text([x, size[1] - 175.0 * s], if gun.ammo == 0 { [1.0, 0.3, 0.3, 1.0] } else { white }, &ammo);
                 ui.set_window_font_scale(1.2 * s);
-                text([x, size[1] - 140.0 * s], [0.85, 0.85, 0.85, 0.9], if gun.slot == 1 { "CHARGE RIFLE" } else { "R-301" });
+                text([x, size[1] - 140.0 * s], [0.85, 0.85, 0.85, 0.9], if gun.slot == 1 { "CHARGE RIFLE" } else { "WINGMAN" });
                 if let Some(hp) = fuse_hp {
                     text([60.0 * s, size[1] - 180.0 * s], white, &format!("FUSE {hp:.0}"));
                 }

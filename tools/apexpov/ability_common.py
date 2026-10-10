@@ -330,6 +330,10 @@ def layout(base=None):
                 carrier_records=old_carriers+carriers, new_carriers=carriers, ancestor_fallbacks=fallback)
 
 
+# bake_wingman.py sets it for the kunai's sequences
+DROP_SCALE = False
+
+
 def decode_source(path, rig, seq, qc):
     animation = ps.animation(path)
     if not animation.Curves():
@@ -366,7 +370,8 @@ def decode_source(path, rig, seq, qc):
         for channel, (offset, width) in zip(t['channels'], ((0, 3), (3, 4), (7, 3))):
             if channel is not None:
                 poses[:, t['bone'], offset:offset+width] = channel
-    require(np.max(abs(poses[..., 7:]-1)) < 1e-3, f'{path}: nonunit scale')
+    # (DROP_SCALE: a scale the pack cannot hold is dropped instead: the kunai's twirl squashes the knife to 0.64)
+    require(DROP_SCALE or np.max(abs(poses[..., 7:]-1)) < 1e-3, f'{path}: nonunit scale')
     return dict(fps=a.Framerate(), frames=frames, loop=bool(a.Looping()), additive=additive,
                 weights=weights, poses=poses[..., :7])
 

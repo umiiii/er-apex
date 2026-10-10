@@ -6,12 +6,51 @@
 
 **本仓库不附带任何游戏文件或游戏资源**，包括《Apex 英雄》和《艾尔登法环》的模型、贴图、动画、音效、HUD 图片和文本。这些资源用本仓库 `tools/` 下的转换工具，从你自己安装的游戏里生成（见[编译](#编译)）。《Apex 英雄》的安装目录必须由你自己指定。
 
+## 这个 fork 的改动
+
+本仓库 fork 自 [umiiii/er-apex](https://github.com/umiiii/er-apex)，在原版基础上：
+
+**武器**
+
+- **六把枪**：Wingman（开局拿在手上）、R-99、R-301、平行步枪、哨兵、Charge Rifle。
+- **哨兵**（特意改过）：全自动每 0.8 秒一发，带 Apex 拉栓动作，弹匣 7 发，每 0.4 秒自动补 1 发（不用换弹），用充能后的开火音效，每发命中都算爆头（70 × 1.8，击杀栏带爆头标记）；**子弹自动追踪**：面朝方向 60 米、左右各 30° 的锥形范围内有敌人时，开枪打出一发发光的追踪子弹，从枪口飞出、拐弯追着敌人飞，飞到才算命中，准星不会动（ini `homing`、`homing_range`、`homing_angle`、`homing_height`、`homing_speed` 可改，默认值写在 `src/spike/homing.rs` 开头）。第一人称模型、动画、音效、HUD 图标都由 `export-assets.ps1` 第 8 步从本机 Apex 导出。
+- **武器轮盘**：按住 Tab，转视角（或按 1～3）选枪，松开就换。按 2 仍是 Charge Rifle。
+- **默认模型和贴图**：所有枪都用默认模型和默认贴图，每个人的 Apex 里都有。R-99 的刀锋模型和平行步枪的青色热情模型需要手动开启（`export-assets.ps1 -SkinModels`），下面的皮肤也是可选的。
+- **检视动作**：按 5 播放手中武器的检视和音效，开火、开镜、换弹、切枪、冲刺或用技能会打断。
+- **收枪模式**：按 3 收起枪，换上恶灵的传家宝苦无（第一人称模型和动作都从本机 Apex 导出）；移速稍快（×1.1，ini `holster_speed`），鼠标左键挥刀（2 米内 30 伤害），5 播放检视（都带苦无音效），再按 3（或 1 / 2）切回枪。HUD 保持不变。
+- **Wingman**：半自动、8 发、单发 50、爆头 ×1.5、换弹 2.1 秒、开镜 60°，后坐力用 Apex 的数值。**Charge Rifle**：8 发。
+- **自定义皮肤（可选）**：把自己的贴图放进 `apex-data\skins\`，第 8 步会自动用上（见[武器皮肤](#武器皮肤可选)）。仓库里不含任何皮肤贴图。
+
+**HUD 字体（可选）**
+
+- 把自己的 `.ttf` / `.otf` 放进 `apex-data\fonts\`，HUD 的数字和英文就用这些字体显示（中文等其他字符仍用 Apex 原字体）。默认所有文字用 `Apex Regular`（没有时用第一个字体）；ini 的 `hud_font_body`、`hud_font_numeric`、`hud_font_bold`（填字体文件名去掉扩展名的小写，或 `off`）可以分别指定，`hud_font = off` 全部关闭。字形图集由 `pwsh export-assets.ps1`（第 8 步）或 `python tools/apexhud/custom_font.py` 生成。仓库里不含字体文件。
+
+**游玩**
+
+- **F5**：切回你自己的艾尔登法环角色，移动和碰撞、视角、HUD、护甲和武器都用游戏原生的，模组的枪、技能和 HUD 关闭。再按 F5 切回动力小子。
+- **键鼠按键提示**：默认游戏看不到任何手柄，界面提示是键盘鼠标。要用手柄玩：`pwsh play.ps1 -Pad`。
+- **敌人判定**：除玩家一方（阵营 1、2、8、12，可用 ini `friendly_teams` 改）外所有角色都能被击中，和原版一样，狗、乌鸦、入侵者、龙和 Boss 都算。
+- **移动**：每秒重读地面碰撞，下落中陷进地面时拉回，避免远处地图晚加载时穿地；坐电梯上下时由游戏接管，直到电梯停稳。
+- **探路者钩爪**：武器轮盘（按住 Tab）里也能选 Q 技能：兴奋剂或钩爪。选钩爪时按 Q 射出钩子（最远 850 单位，约 21 米），按 Apex 原版参数把你拉过去（速度 1.5 秒内从 50 升到 800、加速度 1500、往上拉时重力变轻、脱钩时补一点向上的速度）；按空格、再按 Q、到达钩点或速度太慢时脱钩。无冷却，用 Apex 原版音效，画出钩索（暂时没有第一人称手部动作）。
+- **连杀段位徽章**（右上角，Apex 显示段位的位置）：最近 1 分钟内击杀 0~3 显示 D1，4~10 显示 M1，超过 10 显示 P1。徽章图片需要自己准备：把 `D1.png`、`M1.png`、`P1.png` 放进 `apex-data\hud\rank\`（没有就不显示）。
+- **击杀栏名字**：怪物显示游戏里这一类怪的名字（取自同种骨灰的中文名），游戏里没有的用社区通俗叫法（`tools/apexhud/monster_names_zhocn.json`，按 Paramdex 英文名对照），对照表里也没有的用英文名，都没有才显示“敌人”。
+- **命中音效**：第一次打中某个敌人并造成伤害时播放 Apex 的碎甲音效，每个敌人只播一次（`--set hits`）。
+- **Charge Rifle 音效**随射击结束而停：打断后不再有开火声，光束打到怪物身上也不会循环。
+- **设置**：`pwsh play.ps1 -Fov 90 -FpsLimit 120 -PlayerName "名字" -Pad`。FOV 默认 90；帧数默认原版 60；HUD 名字取 `-PlayerName` 或环境变量 `ER_APEX_PLAYER_NAME`，都没有时用存档角色名。
+
+**部署**
+
+- **没装 DLC 也能导出**：没有《黄金树幽影》时 `erextract` 跳过 `DLC.bhd`。
+- `export-assets.ps1` 共八步（第 8 步：Wingman、R-99、苦无和皮肤），按下面的流程运行一次即可。
+
+已知限制：第三人称身体手里仍是 R-301；Wingman 击锤不单独动作；自发光贴图未使用。
+
 ## 极简开始
 
 复制这段 markdown 给任意 agent：
 
 ```markdown
-帮我把 https://github.com/umiiii/er-apex 仓库跑起来
+帮我把 https://github.com/MegaWeed/er-apex 仓库跑起来
 ```
 
 ## 开始使用
@@ -57,8 +96,9 @@ pwsh export-assets.ps1
 ```
 
 - 脚本会询问《Apex 英雄》的安装目录（里面有 `paks\Win64`）和《艾尔登法环》的 `Game` 目录（里面有 `eldenring.exe`）。能从 Steam 找到时会作为默认值显示，直接回车即可。两个目录只读取，不修改。
-- 然后检查工具链，按顺序执行[生成游戏资源](#生成游戏资源apex-dataer-data)的七个步骤，约 1 小时。第 4 步会启动一次游戏（约 1 分钟）读取玩家骨架，游戏自己退出之前不要操作它。
-- 产物已存在的命令会跳过，所以中途失败时排除原因后直接重新运行即可，会从停下的地方继续；上次被中断的命令会重新完整执行。全部重新生成：`-Force`；只重做第 5–7 步：`-From 5 -Force`。不想回答问题：`-ApexDir <目录> -EldenRingDir <目录>`。不生成测试场地（没有士兵当靶子）：`-NoArena`。
+- 然后检查工具链，按顺序执行[生成游戏资源](#生成游戏资源apex-dataer-data)的八个步骤，约 70 分钟。第 4 步会启动一次游戏（约 1 分钟）读取玩家骨架，游戏自己退出之前不要操作它。
+- 产物已存在的命令会跳过，所以中途失败时排除原因后直接重新运行即可，会从停下的地方继续；上次被中断的命令会重新完整执行。全部重新生成：`-Force`；只重做第 5–8 步：`-From 5 -Force`。不想回答问题：`-ApexDir <目录> -EldenRingDir <目录>`。不生成测试场地（没有士兵当靶子）：`-NoArena`。
+- 武器皮肤是可选的：在这一步之前或之后放进 `apex-data\skins\` 都行（见[武器皮肤](#武器皮肤可选)）。
 
 ### 3. 启动游戏
 
@@ -66,11 +106,12 @@ pwsh export-assets.ps1
 pwsh play.ps1
 ```
 
-- 脚本把测试存档备份到 `scratch\saves`，把模组装到 `scratch\mod`，再通过 me3 以 1920×1080 窗口离线启动游戏。游戏会跳过标题画面，「继续」测试存档里最后玩的角色，站在宁姆格福「引导之始」赐福旁：第一人称的动力小子，手持 R-301，赐福旁刷出三名士兵当靶子。
+- 脚本把测试存档备份到 `scratch\saves`，把模组装到 `scratch\mod`，再通过 me3 以 1920×1080 窗口离线启动游戏。游戏会跳过标题画面，「继续」测试存档里最后玩的角色，站在宁姆格福「引导之始」赐福旁：第一人称的动力小子，手持 Wingman，赐福旁刷出三名士兵当靶子。
 - 测试存档 `ER0000_fuse.sl2` 里要至少有一个角色。第一次用 me3 启动时，me3 会从正常存档复制一份。
-- **点一下游戏窗口**就能用键盘鼠标玩。
-- **F5** 切回艾尔登法环原本的角色（游戏自己的移动和碰撞、视角、HUD、护甲和武器，模组的枪和技能关闭），再按 F5 切回动力小子。
-- 默认枪伤害 ×3、跳板无冷却；加 `-Season3` 用 S3 原值。`-NoSpawn`：不刷士兵。
+- **点一下游戏窗口**就能用键盘鼠标玩。不加 `-Pad` 时游戏看不到手柄。
+- 按键：WASD 移动、空格跳、Shift 冲刺、Ctrl 蹲 / 滑铲；鼠标左键开火、右键开镜、R 换弹；按住 Tab 开武器轮盘（或按 1～3），2 切 Charge Rifle，3 收枪模式（苦无），5 检视；Q 兴奋剂、Z 跳板、4 护盾电池、G 破片手雷；**F5** 切回艾尔登法环角色，再按切回来。
+- 选项：`-Fov 90`（70～110）、`-FpsLimit 120`（默认原版 60）、`-PlayerName "名字"`（HUD 显示的名字）、`-Pad`（用手柄）。
+- 默认枪伤害 ×3（Charge Rifle 不吃这个加成，保持原伤害）、跳板无冷却；加 `-Season3` 用 S3 原值。`-NoSpawn`：不刷士兵。
 - 再刷士兵：`pwsh tools/dev/game.ps1 spawn`。赐福旁约 10.5 m 有一名友方 NPC，别朝它开枪。回到赐福：`pwsh tools/dev/game.ps1 cmd "warp 1042361951"`。退出：`pwsh tools/dev/game.ps1 stop`。
 
 ## 编译
@@ -220,7 +261,65 @@ python tools/fusemesh/convert_fuse.py --geometry-only   # 只算骨架对齐 →
 python tools/retarget/bake_er_anim.py fuse_idle_rifle_ADS   # → er-data\s4\fuse_er.anim
 ```
 
-全部完成后用 `pwsh play.ps1` 启动游戏。`game.ps1 install -Legend octane` 会取各链条最后一级的产物：999 用 `octane_gun`，998、材质包和动画包用 `octane_pov_weapons` / `octane_weapons`，另外复制基础姿态 `fuse_er.anim` 和地上跳板 `padworld.json`。某一级不完整时退回上一级。
+**8. Wingman、R-99、平行步枪、哨兵与苦无（约 20 分钟，本 fork 新增）**
+
+和前面几步一样，从本机 Apex 导出 Wingman、R-99、平行步枪、哨兵和恶灵的传家宝苦无，都是默认模型。`build_wingman.py` 在第 6 步 `octane_pov_weapons` 的基础上，把它们加进模型 998 和动画包，并套用可选的皮肤。
+
+```powershell
+python tools/apexassets/wingman_assets.py
+python tools/apexassets/r99_assets.py
+python tools/apexassets/flatline_base_assets.py       # 平行步枪（flatline_base_v）
+python tools/apexassets/kunai_assets.py               # 恶灵传家宝苦无（heirloom_wraith_v18_kunai_v）
+python tools/apexassets/sentinel_assets.py            # 哨兵（sentinel_base_v）
+python tools/apexpov/bake_wingman.py                  # → apex-data\pov\octane_wingman\fuse_pov.anim
+python tools/fusepov/build_wingman.py                 # → er-data\s3\octane_pov_wingman（模型 998）；皮肤见下
+python tools/fuseaudio/export_audio.py --set wingman
+python tools/fuseaudio/export_audio.py --set r99
+python tools/fuseaudio/export_audio.py --set kunai
+python tools/fuseaudio/export_audio.py --set flatline
+python tools/fuseaudio/export_audio.py --set sentinel
+python tools/fuseaudio/export_audio.py --set hits
+python tools/fuseaudio/export_audio.py --set grapple
+python tools/apexhud/export_wingman.py --legend octane
+python tools/apexhud/export_wingman.py --legend octane --weapon r99
+python tools/apexhud/export_wingman.py --legend octane --weapon flatline
+python tools/apexhud/export_wingman.py --legend octane --weapon sentinel
+python tools/apexhud/export_wingman.py --legend octane --weapon kunai
+python tools/apexhud/export_wingman.py --legend octane --weapon grapple
+python tools/apexhud/custom_font.py                   # 仅当 apex-data\fonts 里有字体：→ apex-data\hud\custom_font
+```
+
+#### 皮肤模型（可选）
+
+`pwsh export-assets.ps1 -SkinModels` 会把 R-99 换成刀锋模型（`r99_react_v20_ascension_v`）、平行步枪换成青色热情模型（`flatline_v20_trshunter_v`），并重新生成动画包和模型 998；不带 `-SkinModels` 再运行一次就换回默认模型。手动执行时，多导出这两个模型，并给 `bake_wingman.py` 和 `build_wingman.py` 设置 `ERAPEX_SKIN_MODELS=1`：
+
+```powershell
+python tools/apexassets/r99_ascension_assets.py
+python tools/apexassets/flatline_assets.py
+$env:ERAPEX_SKIN_MODELS = '1'
+python tools/apexpov/bake_wingman.py
+python tools/fusepov/build_wingman.py
+```
+
+#### 武器皮肤（可选）
+
+`apex-data\skins\` 下放了哪个文件夹，就替换哪把枪的贴图（放在别处：`export-assets.ps1 -Skins <文件夹>`）：
+
+| 文件夹 | 文件 | 替换 |
+|---|---|---|
+| `apex-data\skins\wingman\` | `Wingman_Default_col.dds`（可选 `_spc`、`_nml`、`_gls`；`.png` 也行） | Wingman 的基础材质 |
+| `apex-data\skins\chargerifle\` | `col\`、`nml\`、`gls\` 子文件夹，各含若干尺寸的 `.dds`，如 `1024.dds`、`2048.dds`，取最大的一张 | Charge Rifle 的主材质 |
+| `apex-data\skins\r99\` | `<尺寸> COL SPC.dds`，如 `2048 COL SPC.dds`，取最大的一张 | R-99 的颜色和高光（刀锋模型：仅 `-SkinModels`） |
+| `apex-data\skins\flatline\` | `*COL*.dds` 和 `*SPC*.dds`（可选 `*AO*.dds` 发光层），取最大的一张 | 平行步枪的颜色和高光（青色热情模型：仅 `-SkinModels`） |
+| `apex-data\skins\kunai\` | `*_col.dds` 和 `*_spc.dds`（放在子文件夹里也行，如 `1024\P2020_Default_col.dds`），取最大的一张 | 苦无的颜色和高光 |
+
+添加、更换或删除皮肤文件夹后，再运行一次 `pwsh export-assets.ps1`：第 8 步发现皮肤变了，会重新生成模型 998，其余步骤跳过。也可以手动执行：
+
+```powershell
+python tools/fusepov/build_wingman.py --skin apex-data\skins\wingman --cr-skin apex-data\skins\chargerifle --kunai-skin apex-data\skins\kunai
+```
+
+全部完成后用 `pwsh play.ps1` 启动游戏。`game.ps1 install -Legend octane` 会取各链条最后一级的产物：999 用 `octane_gun`，998、材质包和动画包用 `octane_pov_wingman`（没有时用 `octane_pov_weapons` / `octane_weapons`），另外复制基础姿态 `fuse_er.anim` 和地上跳板 `padworld.json`。某一级不完整时退回上一级。
 
 生成完的 `apex-data` 和 `er-data` 大部分是中间产物。游戏实际读取的部分约 490 MB：模型约 147 MB，动画包约 61 MB，HUD 约 45 MB，音效约 235 MB。
 

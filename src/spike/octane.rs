@@ -269,6 +269,8 @@ pub fn update(dt: f32) {
         o.regen_tick = 0;
         o.regen_target = None;
         o.regen_on = false;
+        drop(o);
+        super::grapple::release("out of play");
         return;
     }
     begin_stim();
@@ -287,9 +289,14 @@ pub fn update(dt: f32) {
         (o.last_tactical, o.last_ultimate) = (tactical, ultimate);
         pressed
     };
+    // Q: the stim, or Pathfinder's grapple when the weapon wheel picked it (grapple.rs)
     if q {
-        log(format!("octane: {}", stim("key Q")));
+        match super::grapple::q_ability() {
+            super::grapple::QAbility::Stim => log(format!("octane: {}", stim("key Q"))),
+            super::grapple::QAbility::Grapple => log(super::grapple::press("key Q")),
+        }
     }
+    super::grapple::update(dt.clamp(0.0, 0.1));
     if z {
         log(format!("octane: {}", toss("key Z")));
     }

@@ -192,6 +192,12 @@ fn run(line: &str) -> String {
         "nade" => spike::grenade::dev(&args),
         "fx" => spike::fx::dev(&args),
         "disarm" => spike::armor::disarm(),
+        // `grapple`: Q's ability to the grapple and Q pressed; `grapple stim`: back to the stim
+        "grapple" if args.first() == Some(&"stim") => spike::grapple::select(spike::grapple::QAbility::Stim, "dev"),
+        "grapple" => {
+            let s = spike::grapple::select(spike::grapple::QAbility::Grapple, "dev");
+            format!("{s}; {}", spike::grapple::press("dev"))
+        }
         "mode" => crate::mode::set(args.first().is_none_or(|a| *a != "tarnished")),
         "pose" => spike::pose::command(args.first().copied()),
         "fire" => spike::gun::hold_fire(args.first().and_then(|a| a.parse().ok()).unwrap_or(1.0)),

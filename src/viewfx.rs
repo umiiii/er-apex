@@ -287,8 +287,9 @@ impl Fx {
         self.vm_punch.step(dt, VM_K_HIP.lerp(VM_K_ADS, ads), VM_C_HIP.lerp(VM_C_ADS, ads));
         self.ads = ads;
         if self.kick.x != Vec3::ZERO || self.kick.v != Vec3::ZERO {
-            use crate::spike::chargerifle::{SPRING_C_ADS, SPRING_C_HIP, SPRING_K_ADS, SPRING_K_HIP};
-            self.kick.step(dt, SPRING_K_HIP.lerp(SPRING_K_ADS, ads), SPRING_C_HIP.lerp(SPRING_C_ADS, ads));
+            // the weapon in hand's spring (the Wingman's `wingman`, the Charge Rifle's `titan_arc`)
+            let ([k_hip, c_hip, k_ads, c_ads], _) = crate::spike::weapons::kick_spring();
+            self.kick.step(dt, k_hip.lerp(k_ads, ads), c_hip.lerp(c_ads, ads));
         }
 
         // the slide's roll: towards the velocity turned a quarter left (the eye's right turns to its
@@ -330,8 +331,8 @@ impl Fx {
     /// The part of the weapon kick the view does not show (S3 0x140BE0BC0: the hip fraction to the
     /// aimed one by the zoom).
     fn weapon_fraction(&self) -> f32 {
-        use crate::spike::chargerifle::{WEAPON_FRACTION_ADS, WEAPON_FRACTION_HIP};
-        WEAPON_FRACTION_HIP + (WEAPON_FRACTION_ADS - WEAPON_FRACTION_HIP) * self.ads
+        let (_, (hip, ads)) = crate::spike::weapons::kick_spring();
+        hip + (ads - hip) * self.ads
     }
 }
 

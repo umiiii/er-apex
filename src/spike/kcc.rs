@@ -56,10 +56,15 @@ const MAP_RAY: u32 = 0x08;
 /// below the window's centre, 8 m ahead, before the next window was read (~0.9 s), and fell through
 /// (2026-10-04 23:44; 12 m down missed it as well and hit the 20,000-triangle cap at the start).
 /// The fall is caught in `update`; a window reaching further down while airborne is still to do.
-const WINDOW: Window = Window { radius: 12.0, down: 6.0, up: 6.0, column: 2.0, below: 40.0, max_tris: 20_000 };
+/// At most 40,000 triangles, the nearest: Volcano Manor's rooms give 25,000-73,000 in this window,
+/// and the 20,000 it had left holes he fell through (2026-10-10).
+const WINDOW: Window = Window { radius: 12.0, down: 6.0, up: 6.0, column: 2.0, below: 40.0, max_tris: 40_000 };
 /// At most one fall-through recovery (see `update`) in this many seconds: a floor the game's ray
 /// hits but the controller can't collide with must not catch the Tarnished every frame.
 const RECOVER_GAP_S: f32 = 2.0;
+/// Stuck this long, the controller lets the game move him for STUCK_HANDS_OFF_MS.
+const STUCK_RELEASE_S: f32 = 0.3;
+const STUCK_HANDS_OFF_MS: u64 = 600;
 /// Metres from the window's centre before the next window is fetched.
 const REFETCH: f32 = 4.0;
 /// A window is read again at least this often (seconds): the map's collision streams in late.
@@ -208,6 +213,8 @@ struct Kcc {
     /// No ground in the last window: the game keeps the Tarnished until then (no window every
     /// frame while he falls through nothing).
     retry_at: Option<Instant>,
+    /// Since when the capsule has been stuck in the triangles (it cannot move while it is)
+    stuck_since: Option<Instant>,
     /// Frames stepped: `Locomotion::frame`.
     loco_frame: u64,
     /// After a fall through the controller's world: the horizontal velocity (world m/s) to restart
@@ -258,6 +265,7 @@ impl Kcc {
             slow_dumps: 0,
             cross_dumps: 0,
             retry_at: None,
+            stuck_since: None,
             loco_frame: 0,
             carry: None,
             last_recovery: None,
@@ -410,6 +418,28 @@ pub fn launch(velocity: Vec3, double_jump: bool, gravity_scale: f32) -> bool {
     let mut g = KCC.lock().unwrap_or_else(|e| e.into_inner());
     let Some(ctl) = g.as_mut().and_then(|k| k.ctl.as_mut()) else { return false };
     ctl.launch(v3(velocity / MPU), double_jump, gravity_scale).is_ok()
+}
+
+/// Sets the velocity (world m/s) with gravity so scaled (Pathfinder's grapple each frame:
+/// er-apex-move `Controller::pull`). False with the controller off.
+pub fn pull(velocity: Vec3, gravity_scale: f32) -> bool {
+    let mut g = KCC.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(ctl) = g.as_mut().and_then(|k| k.ctl.as_mut()) else { return false };
+    ctl.pull(v3(velocity / MPU), gravity_scale).is_ok()
+}
+
+/// The last step's move input (world, flat, camera-relative, length 0..1): the grapple's swing.
+static WISH: Mutex<Vec3> = Mutex::new(Vec3::ZERO);
+
+pub fn wish() -> Vec3 {
+    *WISH.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The velocity (world m/s), whether on the ground.
+pub fn velocity() -> Option<(Vec3, bool)> {
+    let g = KCC.lock().unwrap_or_else(|e| e.into_inner());
+    let ctl = g.as_ref()?.ctl.as_ref()?;
+    Some((g3(&ctl.state.velocity) * MPU, ctl.state.grounded))
 }
 
 /// A step's events for `kcc trace` ("-": none).
@@ -775,6 +805,7 @@ pub fn update(dt: f32) {
     }
     let flat = camera_flat();
     let wish = flat.map_or(Vec3::ZERO, |(f, r)| r * stick.x + f * stick.y);
+    *WISH.lock().unwrap_or_else(|e| e.into_inner()) = wish;
     // sprint is the held button: one press keeps sprinting while running on (Apex's sticky
     // sprint lives in the controller)
     let input = MoveInput {
@@ -792,6 +823,8 @@ pub fn update(dt: f32) {
     };
 
     let ctl = k.ctl.as_mut().unwrap();
+    // the holstered mode (key 3, the kunai out: weapons.rs) runs a little faster
+    ctl.set_speed_multiplier(SPEED_MULT * super::weapons::move_scale());
     let before = ctl.state;
     let t0 = Instant::now();
     let result = ctl.step(&input, dt.clamp(0.0, 0.1));
@@ -847,6 +880,18 @@ pub fn update(dt: f32) {
     k.stats.frame(frame_t0.elapsed().as_secs_f32() * 1e6);
     if st.stuck {
         k.stats.stuck += 1;
+    }
+    // stuck in the triangles (a wedge the capsule cannot get out of: in Volcano Manor, 2026-10-10,
+    // he stood frozen for 200 s): the game moves him for a moment, then the controller starts over
+    // where he is
+    if !st.stuck {
+        k.stuck_since = None;
+    } else if k.stuck_since.get_or_insert_with(Instant::now).elapsed().as_secs_f32() > STUCK_RELEASE_S {
+        log(format!("kcc: stuck in the map at {pos:.2?} for {STUCK_RELEASE_S} s: the game moves him, the controller starts over"));
+        k.stuck_since = None;
+        k.retry_at = Some(Instant::now() + std::time::Duration::from_millis(STUCK_HANDS_OFF_MS));
+        k.release(Some(player));
+        return;
     }
 
     // a lift: the game's ground under him moves while he stands still (the controller's triangles

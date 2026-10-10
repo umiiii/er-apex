@@ -79,7 +79,8 @@ use crate::log;
 
 // ---- S3 numbers ------------------------------------------------------------------------------
 
-pub const CLIP: u32 = 4;
+/// S3's `ammo_clip_size` 4, plus 4 (the user, 2026-10-09).
+pub const CLIP: u32 = 8;
 /// `sustained_discharge_duration`, `sustained_discharge_pulse_frequency`: the release's, from the
 /// video (the TEMP file: 1.25, 0.104).
 pub const DISCHARGE: f32 = 0.5;
@@ -734,7 +735,8 @@ pub fn update(dt: f32, t: Trigger, in_hand: bool, ready: bool) {
             Event::Pulse { index } => {
                 // the laser's ray: along the shot's direction with all of the kick, no spread
                 let out = gun::fire_ray_ex(0.0, (0.0, 0.0), crate::viewfx::weapon_aim_offset(), 1, range(), true, |zone, metres| {
-                    hit_damage(zone, metres * super::kcc::UNITS_PER_METRE, gun::damage_mult() * LASER_DAMAGE_SCALE)
+                    // (not ini gun_damage_mult: the Charge Rifle keeps its own damage, the user's 2026-10-09 ask)
+                    hit_damage(zone, metres * super::kcc::UNITS_PER_METRE, LASER_DAMAGE_SCALE)
                 });
                 if let Some(o) = out {
                     match o.on {
@@ -762,9 +764,9 @@ pub fn update(dt: f32, t: Trigger, in_hand: bool, ready: bool) {
                 let from = crate::firstperson::muzzle_world();
                 let (soft, hard) = view_kick(shot.u);
                 // the shot goes along the camera with the kick the view does not show (viewfx.rs);
-                // ini `gun_damage_mult` as for the R-301
+                // not ini `gun_damage_mult` (the user's 2026-10-09 ask: the Charge Rifle keeps its own)
                 let out = gun::fire_ray_ex(shot.spread, shot.r, crate::viewfx::weapon_aim_offset(), 1, range(), true, |zone, metres| {
-                    hit_damage(zone, metres * super::kcc::UNITS_PER_METRE, gun::damage_mult())
+                    hit_damage(zone, metres * super::kcc::UNITS_PER_METRE, 1.0)
                 });
                 crate::viewfx::weapon_kick(soft, hard);
                 let mut line = None;

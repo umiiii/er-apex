@@ -40,11 +40,21 @@ use crate::{log, paths};
 
 const INCH: f32 = 0.0254;
 /// Carrier groups: 0 the arms, 1 the R-301, 2 the injector, 3 the pad, 4 the battery (T021), 5
-/// the Charge Rifle, 6 the frag grenade in the hand, 7 and 8 two thrown grenades (T022).
-const GROUPS: usize = 9;
-/// The Charge Rifle's and the thrown grenades' groups.
+/// the Charge Rifle, 6 the frag grenade in the hand, 7 and 8 two thrown grenades (T022), 9 the
+/// Wingman (in the R-301's slot: tools/apexpov/bake_wingman.py).
+const GROUPS: usize = 14;
+/// The Charge Rifle's, the hand grenade's and the Wingman's groups.
 const RIFLE: usize = 5;
 const FRAG: usize = 6;
+const WINGMAN: usize = 9;
+/// The R-99's group (part LG: bake_wingman.py).
+const R99G: usize = 10;
+/// The kunai's group (part LG: bake_wingman.py), the holstered mode's (key 3: weapons.rs `Melee`).
+const KUNAI: usize = 11;
+/// The Flatline's group (part LG: bake_wingman.py).
+const FLATLINEG: usize = 12;
+/// The Sentinel's group (part LG: bake_wingman.py).
+const SENTINELG: usize = 13;
 pub const THROWN: [u8; 2] = [7, 8];
 
 /// Where the carriers of a group that does not show go (dev `fp hide`). The renderer takes
@@ -95,6 +105,29 @@ const MUZZLE: Xf = Xf { t: Vec3::new(0.0, 3.978_2, 26.367_5), r: Quat::from_xyzw
 /// `muzzle_flash` on the Charge Rifle's `def_c_base` (retail `chargerifle_base_v.qc` `$definebone`:
 /// inches; its rotation is not needed, only where the beam starts: hud/beam.rs).
 const CR_MUZZLE: Xf = Xf { t: Vec3::new(0.0, 0.895_842, 20.380_127), r: Quat::IDENTITY };
+
+/// `muzzle_flash` on the Wingman's `def_c_base` (retail `wingman_base_v.qc` `$definebone`: inches,
+/// the R-301's -90° rotation).
+const WM_MUZZLE: Xf = Xf { t: Vec3::new(0.0, 2.795_282, 9.549_05), r: MUZZLE.r };
+
+/// `muzzle_flash` on the R-99's `def_c_base` (retail `r99_base_v.qc` `$definebone`).
+const R9_MUZZLE: Xf = Xf { t: Vec3::new(0.0, 3.288_844, 17.839_268), r: MUZZLE.r };
+/// `muzzle_flash` on the Flatline's `def_c_base` (retail `flatline_base_v.qc` and `flatline_v20_trshunter_v.qc` `$definebone`:
+/// on `def_barrel` (0 2.3622 16.1839), 0.039064 up and 4.496695 ahead of it).
+const FL_MUZZLE: Xf = Xf { t: Vec3::new(0.0, 2.401_264, 20.680_613), r: MUZZLE.r };
+/// `muzzle_flash` on the Sentinel's `def_c_base` (retail `sentinel_base_v.qc` `$definebone`).
+const SN_MUZZLE: Xf = Xf { t: Vec3::new(0.004_915, 5.297_734, 40.482_044), r: MUZZLE.r };
+
+/// A weapon's muzzle on its `def_c_base` (the Charge Rifle's turn not needed: the R-301's).
+fn muzzle_of(w: Weapon) -> Xf {
+    match w {
+        Weapon::Wingman => WM_MUZZLE,
+        Weapon::R99 => R9_MUZZLE,
+        Weapon::Flatline => FL_MUZZLE,
+        Weapon::Sentinel => SN_MUZZLE,
+        _ => MUZZLE,
+    }
+}
 
 /// Whether the pack is there (then first person poses Apex's view model).
 pub fn available() -> bool {
@@ -262,6 +295,149 @@ struct Anim {
     last_eye: Option<(Vec3, Vec3, Vec3)>,
     started: Instant,
     trace_until: Option<Instant>,
+    /// the inspect playing (key 5): whose, seconds into it
+    inspect: Option<(Weapon, f32)>,
+    /// the holstered mode's kunai (its own clips over the graph's pose)
+    kunai: Kunai,
+    /// the kunai's inspect playing: which (`KUNAI_INSPECTS`), seconds into it
+    kunai_inspect: Option<(usize, f32)>,
+    /// the one a new press cut: which, seconds into it, its weight then and the seconds since
+    kunai_inspect_out: Option<(usize, f32, f32, f32)>,
+    /// the Sentinel's bolt after a shot: seconds into it, and the one a new shot cut (seconds into
+    /// it, seconds since cut)
+    rechamber: Option<f32>,
+    rechamber_out: Option<(f32, f32)>,
+}
+
+/// The kunai's clips (retail `heirloom_wraith_v18_kunai_v_animRig.qc` through
+/// apex-data/pov/octane_wingman/kunai_sequences.json): `idle` / `crouch` (48 frames, 30 fps, absolute
+/// loops, by crouch), `sprint` (21 frames, 42 fps, absolute loop), `jump` (31 frames, additive),
+/// `land` (19 frames, additive, by crouch), `melee_idle_swipe` (26 frames) for a swing, `inspect`
+/// (145 frames).
+#[derive(Clone, Copy, Debug, Default)]
+struct Kunai {
+    /// seconds of the idle loop, of the sprint loop
+    idle: f32,
+    sprint_t: f32,
+    /// the sprint pose's weight, eased over FADE
+    sprint_w: f32,
+    jump: Option<f32>,
+    land: Option<f32>,
+    /// seconds since the controller last said sprinting (a frame or two without it keeps the pose)
+    since_sprint: f32,
+}
+
+const KUNAI_FADE: f32 = 0.2;
+/// How long the sprint pose stays after the controller stops saying sprinting.
+const SPRINT_HOLD: f32 = 0.15;
+/// The kunai's inspects (retail QC: every `ACT_VM_WEAPON_INSPECT` sequence, picked at random by its
+/// activity weight as Apex does): its clip, frames (30 fps), weight, whether only crouched (the
+/// `crouch` activity modifier), its sounds at their QC frames. `inspect_file` (3) and
+/// `inspect_sweaty` (2) hold props the pack does not have (a folder, a towel): left out.
+struct KunaiInspect {
+    clip: &'static str,
+    frames: u32,
+    weight: u32,
+    crouched: bool,
+    sounds: &'static [(u32, &'static str)],
+}
+const KUNAI_BASIC_SOUNDS: &[(u32, &str)] = &[(1, "wraith_mvmt_kunai_inspect_basic_p1"), (43, "wraith_mvmt_kunai_inspect_basic_p2"), (124, "wraith_mvmt_kunai_inspect_basic_p3")];
+const KUNAI_INSPECTS: [KunaiInspect; 5] = [
+    KunaiInspect { clip: "kn_inspect_0", frames: 145, weight: 5, crouched: false, sounds: KUNAI_BASIC_SOUNDS },
+    KunaiInspect {
+        clip: "kn_inspect_fly_0",
+        frames: 331,
+        weight: 4,
+        crouched: false,
+        sounds: &[(0, "wraith_mvmt_kunai_inspect_fly_p1"), (107, "wraith_mvmt_kunai_inspect_fly_p2"), (208, "wraith_mvmt_kunai_inspect_fly_p3"), (263, "wraith_mvmt_kunai_inspect_fly_p4")],
+    },
+    KunaiInspect { clip: "kn_inspect_generic_0", frames: 145, weight: 1, crouched: false, sounds: KUNAI_BASIC_SOUNDS },
+    KunaiInspect {
+        clip: "kn_inspect_insignia_0",
+        frames: 113,
+        weight: 1,
+        crouched: true,
+        sounds: &[(0, "wraith_mvmt_kunai_inspect_insignia_p1"), (42, "wraith_mvmt_kunai_inspect_insignia_charged"), (58, "wraith_mvmt_kunai_inspect_insignia_p2"), (68, "wraith_mvmt_kunai_inspect_insignia_w_appears")],
+    },
+    // the run's (never picked at random): `drawsprint_twirl` (ACT_VM_DRAW_TO_SPRINT, the first draw's
+    // twirl), key 5 on a sprint, again from its start on every press
+    KunaiInspect { clip: "kn_drawsprint_twirl_0", frames: 63, weight: 0, crouched: false, sounds: &[(0, "wraith_mvmt_kunai_firstdraw")] },
+];
+/// `KUNAI_INSPECTS`' sprint twirl.
+const KUNAI_TWIRL: usize = 4;
+/// A new press's crossfade from the inspect it cuts (seconds).
+const KUNAI_INSPECT_BLEND: f32 = 0.15;
+
+fn kunai_inspect_seconds(k: usize) -> f32 {
+    (KUNAI_INSPECTS[k].frames - 1) as f32 / 30.0
+}
+
+fn stop_kunai_sounds(k: usize) {
+    KUNAI_INSPECTS[k].sounds.iter().for_each(|(_, n)| crate::audio::stop(n));
+}
+
+/// The inspect's layer `t` seconds in (faded in and out over 0.2 s), times `scale`.
+fn kunai_inspect_layer(k: usize, t: f32, scale: f32) -> ability::Layer {
+    let total = kunai_inspect_seconds(k);
+    let weight = (t / 0.2).min((total - t) / 0.2).clamp(0.0, 1.0) * scale;
+    ability::Layer { samples: vec![(KUNAI_INSPECTS[k].clip.into(), 1.0)], cycle: (t / total).clamp(0.0, 1.0), weight, mode: ability::Mode::Over }
+}
+
+impl Kunai {
+    fn step(&mut self, dt: f32, m: &Moving) {
+        self.idle += dt;
+        self.sprint_t += dt;
+        self.since_sprint = if m.sprinting && !m.sliding { 0.0 } else { self.since_sprint + dt };
+        let want = if self.since_sprint < SPRINT_HOLD { 1.0 } else { 0.0 };
+        let d = dt / KUNAI_FADE;
+        // toward the wanted weight (at it: stays; `>` alone took 0.08 off every other frame, the knife shook)
+        self.sprint_w = if want >= self.sprint_w { (self.sprint_w + d).min(want) } else { (self.sprint_w - d).max(want) };
+        // a one-shot playing is not started again (a run over bumps lands every few frames: each
+        // restart snapped the knife back to the clip's first frame)
+        if m.jumped && self.jump.is_none() {
+            self.jump = Some(0.0);
+        }
+        if m.landed && self.land.is_none() {
+            self.land = Some(0.0);
+        }
+        self.jump = self.jump.map(|t| t + dt).filter(|t| *t < 30.0 / 30.0);
+        self.land = self.land.map(|t| t + dt).filter(|t| *t < 18.0 / 30.0);
+    }
+
+    /// Its layers over the graph's pose, in order (the first one covers it whole).
+    fn layers(&self, crouch: f32) -> Vec<ability::Layer> {
+        use ability::{Layer, Mode};
+        let c = crouch.clamp(0.0, 1.0);
+        let two = |a: &str, b: &str| [(a.to_string(), 1.0 - c), (b.to_string(), c)].into_iter().filter(|s| s.1 > 0.0).collect::<Vec<_>>();
+        let mut v = vec![Layer { samples: two("kn_idle_0", "kn_crouch_0"), cycle: (self.idle * 30.0 / 47.0).rem_euclid(1.0), weight: 1.0, mode: Mode::Over }];
+        if self.sprint_w > 0.0 {
+            v.push(Layer { samples: vec![("kn_sprint_0".into(), 1.0)], cycle: (self.sprint_t * 42.0 / 20.0).rem_euclid(1.0), weight: self.sprint_w, mode: Mode::Over });
+        }
+        if let Some(t) = self.jump {
+            let weight = ((1.0 - t) / 0.35).clamp(0.0, 1.0);
+            v.push(Layer { samples: vec![("kn_jump_0".into(), 1.0)], cycle: t.clamp(0.0, 1.0), weight, mode: Mode::Add });
+        }
+        if let Some(t) = self.land {
+            let total = 18.0 / 30.0;
+            let weight = (t / 0.05).min((total - t) / 0.2).clamp(0.0, 1.0);
+            v.push(Layer { samples: two("kn_land_0", "kn_land_1"), cycle: (t / total).clamp(0.0, 1.0), weight, mode: Mode::Add });
+        }
+        // a swing (weapons.rs `melee_update`): `melee_idle_swipe` over it all
+        if let Some(t) = super::weapons::swing_age().filter(|t| *t < 25.0 / 30.0) {
+            let total = 25.0 / 30.0;
+            let weight = (t / 0.05).min((total - t) / 0.15).clamp(0.0, 1.0);
+            v.push(Layer { samples: vec![("kn_melee_idle_swipe_0".into(), 1.0)], cycle: (t / total).clamp(0.0, 1.0), weight, mode: Mode::Over });
+        }
+        v
+    }
+}
+
+/// Whether the hands' slot is the holstered mode's (the kunai in hand, coming out or going away).
+fn melee_slot() -> bool {
+    use super::weapons::{Phase, Slot};
+    match super::weapons::phase() {
+        Phase::Ready(s) | Phase::Holstering { slot: s, .. } | Phase::Drawing { slot: s, .. } => s == Slot::Melee,
+    }
 }
 
 static ANIM: Mutex<Option<Anim>> = Mutex::new(None);
@@ -286,20 +462,34 @@ fn sway_input(dt: f32, i: &Inputs, last: Option<(Vec3, Vec3, Vec3)>) -> SwayIn {
 
 /// The weapon whose view model the hands hold this frame (weapons.rs: the one going away during
 /// its put-away, then the one coming out): the Charge Rifle only with its clips in the pack (T022),
-/// else the R-301's graph poses as before U3's stage 2.
-fn view_weapon(rifle: bool) -> Weapon {
+/// else the R-301's slot's graph (the Wingman's with its clips in the pack) poses as before U3's
+/// stage 2.
+fn view_weapon(rifle: bool, primary: Weapon) -> Weapon {
     use super::weapons::{Phase, Slot};
     let slot = match super::weapons::phase() {
         Phase::Ready(s) | Phase::Holstering { slot: s, .. } | Phase::Drawing { slot: s, .. } => s,
     };
-    if slot == Slot::ChargeRifle && rifle { Weapon::ChargeRifle } else { Weapon::R301 }
+    if slot == Slot::ChargeRifle && rifle { Weapon::ChargeRifle } else { primary }
+}
+
+/// The weapon of the R-301's slot (weapons.rs `primary_gun`, the wheel's choice) when the pack has
+/// it (bake_wingman.py), else the R-301.
+fn primary_weapon() -> Weapon {
+    use super::weapons::Gun;
+    match super::weapons::primary_gun() {
+        Gun::Wingman if with_pack(|p| p.has_wingman()).unwrap_or(false) => Weapon::Wingman,
+        Gun::R99 if with_pack(|p| p.has_r99()).unwrap_or(false) => Weapon::R99,
+        Gun::Flatline if with_pack(|p| p.has_flatline()).unwrap_or(false) => Weapon::Flatline,
+        Gun::Sentinel if with_pack(|p| p.has_sentinel()).unwrap_or(false) => Weapon::Sentinel,
+        _ => Weapon::R301,
+    }
 }
 
 /// Once a frame: steps the animation graphs by `dt` seconds and poses the view model.
 pub fn step(dt: f32, i: &Inputs) {
     let mut g = ANIM.lock().unwrap_or_else(|e| e.into_inner());
     let a = g.get_or_insert_with(|| Anim {
-        graph: Graph::new(),
+        graph: Graph::new_for(primary_weapon()),
         cr_graph: Graph::new_for(Weapon::ChargeRifle),
         cr_last_shots: None,
         view: Weapon::R301,
@@ -314,13 +504,28 @@ pub fn step(dt: f32, i: &Inputs) {
         last_eye: None,
         started: Instant::now(),
         trace_until: None,
+        inspect: None,
+        kunai: Kunai::default(),
+        kunai_inspect: None,
+        kunai_inspect_out: None,
+        rechamber: None,
+        rechamber_out: None,
     });
-    let s = sway_input(dt, i, a.last_eye);
+    let mut s = sway_input(dt, i, a.last_eye);
+    // the kunai's inspect on the run: the hands as when standing (no run bob or sway under it)
+    if a.kunai_inspect.is_some_and(|(k, _)| k != KUNAI_TWIRL) {
+        (s.velocity, s.sliding) = (Vec3::ZERO, false);
+    }
     a.last_eye = i.eye;
     a.sway.step(&s, &R301_HIP, &R301_ZOOMED);
     a.drawn_turn = a.posed.as_ref().map(|p| p.camera_turn);
     let rifle = with_pack(|p| p.has_rifle()).unwrap_or(false);
-    a.view = view_weapon(rifle);
+    // slot 1's gun changed (the wheel): its own graph
+    let primary = primary_weapon();
+    if a.graph.weapon() != primary {
+        a.graph = Graph::new_for(primary);
+    }
+    a.view = view_weapon(rifle, primary);
     let r301_shot = a.last_shots.is_some_and(|n| i.shots > n);
     a.last_shots = Some(i.shots);
     let cr_shot = a.cr_last_shots.is_some_and(|n| i.cr_shots > n);
@@ -338,13 +543,21 @@ pub fn step(dt: f32, i: &Inputs) {
     // landing instead of the graph's two-handed ones (last frame's ability output decides)
     let onehanded = a.ability_out.as_ref().is_some_and(|o| o.onehanded > 0.5);
     let (jumped, landed) = moving.map_or((false, false), |m| (m.jumped, m.landed));
+    // the Sentinel with the stim: the gun and the right hand as without it, the graph's two-handed
+    // pose, shots, jumps and landings (the stim's arms take the left hand: the user's 2026-10-10
+    // ask), none of the one-handed clips
+    let sn_stim = onehanded && a.view == Weapon::Sentinel;
     let graph_moving = moving.map(|mut m| {
-        if onehanded {
+        if onehanded && !sn_stim {
             (m.jumped, m.landed) = (false, false);
+        }
+        // and running with it, the walk's pose, not the sprint's (the user, 2026-10-10)
+        if sn_stim {
+            m.sprinting = false;
         }
         m
     });
-    a.signals = Signals { ads: i.ads, shot: r301_shot && !onehanded, reload: i.reload, moving: graph_moving };
+    a.signals = Signals { ads: i.ads, shot: r301_shot && (!onehanded || sn_stim), reload: i.reload, moving: graph_moving };
     a.graph.step(dt, &a.signals);
     a.cr_graph.step(dt, &Signals { ads: i.ads, shot: cr_shot && !onehanded, reload: i.cr_reload, moving: graph_moving });
     let out = if a.view == Weapon::ChargeRifle { a.cr_graph.out() } else { a.graph.out() };
@@ -355,7 +568,7 @@ pub fn step(dt: f32, i: &Inputs) {
     };
     let m = moving.unwrap_or_default();
     // the Charge Rifle without its own clips: no weapon to pull out after the battery or the grenade
-    let other_weapon = super::weapons::active() != super::weapons::Slot::R301 && !rifle;
+    let other_weapon = (super::weapons::active() != super::weapons::Slot::R301 && !rifle) || super::weapons::active() == super::weapons::Slot::Melee;
     let params = ability::Params { crouch: m.duck_frac, sprinting: m.sprinting, ads: i.ads, shot, jumped, landed, other_weapon };
     if let Some(h) = hold {
         a.ability = Some(h);
@@ -366,6 +579,15 @@ pub fn step(dt: f32, i: &Inputs) {
         a.ability = None;
     }
     a.ability_out = a.ability.map(|ab| ab.out(params));
+    // the Sentinel with the stim: only the stim's own clips (the injector, the left arm) over the
+    // graph's two-handed pose; its one-handed ones (the switch, idle, sprint, fire, aim) turned the
+    // gun and took the right hand over to the left (the user, 2026-10-10)
+    if a.view == Weapon::Sentinel
+        && let Some(o) = a.ability_out.as_mut()
+        && (o.show_stim || o.onehanded > 0.0)
+    {
+        o.layers.retain(|l| l.samples.first().is_none_or(|s| s.0.starts_with("stim_")));
+    }
     // U9: the frag grenade out (spike/grenade.rs) takes the hands, over any ability
     if let Some(v) = crate::spike::grenade::view() {
         a.ability_out = Some(ordnance::out(v, params));
@@ -374,25 +596,245 @@ pub fn step(dt: f32, i: &Inputs) {
     // the weapon switch (weapons.rs): the R-301's or the Charge Rifle's put-away and pull-out over
     // its graph; without the rifle's clips the R-301's arms stay lowered at its put-away's end
     let swap = weapon_swap(a.view, rifle, m.duck_frac);
-    let gun_group = if a.view == Weapon::ChargeRifle { RIFLE } else { 1 };
+    let gun_group = gun_group(a.view);
     if swap.as_ref().is_some_and(|v| !v.2) && dev_state().force[gun_group].is_none() {
         show[gun_group] = false;
     }
+    // the inspect (key 5): cut by a shot, aiming, a reload, a switch, sprint, an ability or another
+    // weapon in the hands (推断: Apex's inspect ends on any of them)
+    let busy = shot || i.ads > 0.02 || i.reload.is_some() || i.cr_reload.is_some() || swap.is_some() || a.ability_out.is_some() || m.sprinting;
+    let inspect_layer = match a.inspect {
+        Some((w, t)) if w == a.view && !busy && t < inspect_seconds(w) => {
+            a.inspect = Some((w, t + dt));
+            Some(inspect_layer(w, t))
+        }
+        Some((w, t)) => {
+            a.inspect = None;
+            if t < inspect_seconds(w) {
+                inspect_sounds(w).iter().for_each(|(_, n)| crate::audio::stop(n));
+            }
+            None
+        }
+        None => None,
+    };
+    let swapping = swap.is_some();
     let mut posing = with_swap(a.ability_out.as_ref(), swap.map(|v| (v.0, v.1)));
+    if let Some(l) = inspect_layer {
+        posing.get_or_insert_with(|| ability::Out { show_gun: true, ..Default::default() }).layers.insert(0, l);
+    }
+    // the holstered mode (key 3): the kunai's clips under the switch and the abilities, no gun shown
+    let melee = melee_slot();
+    a.kunai.step(dt, &m);
+    show[KUNAI] = false;
+    if melee {
+        let d = dev_state();
+        for g in [1, RIFLE, WINGMAN, R99G, FLATLINEG, SENTINELG] {
+            if d.force[g].is_none() {
+                show[g] = false;
+            }
+        }
+        let gun_shown = a.ability_out.as_ref().is_none_or(|o| o.show_gun);
+        let away = matches!(super::weapons::phase(), super::weapons::Phase::Holstering { cycle, .. } if cycle >= 1.0);
+        show[KUNAI] = d.force[KUNAI].unwrap_or(gun_shown && !away);
+        drop(d);
+        // (with the ability's layers: the battery's hands and clips stay over the kunai)
+        let o = posing.get_or_insert_with(|| a.ability_out.clone().unwrap_or(ability::Out { show_gun: true, ..Default::default() }));
+        let mut layers = a.kunai.layers(m.duck_frac);
+        // its inspect (key 5) over the loops, cut as the guns' is
+        // (not sprint: the kunai is inspected on the run too, the user's 2026-10-09 ask)
+        let kunai_busy = swapping || a.ability_out.is_some() || super::weapons::swing_age().is_some_and(|t| t < 1.0);
+        // the one a new press cut, fading out under the new one
+        a.kunai_inspect_out = match a.kunai_inspect_out {
+            Some((k, t, w, s)) if !kunai_busy && s < KUNAI_INSPECT_BLEND && t < kunai_inspect_seconds(k) => {
+                let mut l = kunai_inspect_layer(k, t, 1.0);
+                l.weight = w * (1.0 - s / KUNAI_INSPECT_BLEND);
+                layers.push(l);
+                Some((k, t + dt, w, s + dt))
+            }
+            _ => None,
+        };
+        a.kunai_inspect = match a.kunai_inspect {
+            Some((k, t)) if !kunai_busy && t < kunai_inspect_seconds(k) => {
+                layers.push(kunai_inspect_layer(k, t, 1.0));
+                Some((k, t + dt))
+            }
+            Some((k, t)) => {
+                // cut short: its sounds end with it (played out: they ring on)
+                if t < kunai_inspect_seconds(k) {
+                    stop_kunai_sounds(k);
+                }
+                None
+            }
+            None => None,
+        };
+        for (k, l) in layers.into_iter().enumerate() {
+            o.layers.insert(k, l);
+        }
+    } else {
+        a.kunai_inspect_out = None;
+        if let Some((k, _)) = a.kunai_inspect.take() {
+            stop_kunai_sounds(k);
+        }
+    }
+    // the Sentinel's bolt (`rechamber`, additive) after each shot, sped up to the mod's shot every
+    // 0.8 s; a new shot cuts it, the old one fading out under the new. With the stim, the
+    // two-handed one too, under the stim's arms (its `rechamber_onehanded` is not a delta on this
+    // pose: the right hand 60 units off, the gun 40° turned)
+    if a.view == Weapon::Sentinel && !melee {
+        if shot {
+            a.rechamber_out = a.rechamber.map(|t| (t, 0.0));
+            a.rechamber = Some(0.0);
+        }
+        let mut layers = Vec::new();
+        if let Some((t, s)) = a.rechamber_out {
+            let mut l = rechamber_layer(t, i.ads, m.duck_frac);
+            l.weight *= 1.0 - s / RECHAMBER_BLEND;
+            layers.push(l);
+            a.rechamber_out = Some((t + dt, s + dt)).filter(|(_, s)| *s < RECHAMBER_BLEND);
+        }
+        if let Some(t) = a.rechamber {
+            layers.push(rechamber_layer(t, i.ads, m.duck_frac));
+            for (frame, name) in RECHAMBER_SOUNDS {
+                let at = *frame as f32 / 63.0 * RECHAMBER_SECONDS;
+                if t <= at && at < t + dt {
+                    crate::audio::play(name, 0.7);
+                }
+            }
+            a.rechamber = Some(t + dt).filter(|t| *t < RECHAMBER_SECONDS);
+        }
+        if !layers.is_empty() {
+            let o = posing.get_or_insert_with(|| a.ability_out.clone().unwrap_or(ability::Out { show_gun: true, ..Default::default() }));
+            // first: the stim's arms over it keep the left hand on the injector
+            o.layers.splice(0..0, layers);
+        }
+    } else {
+        (a.rechamber, a.rechamber_out) = (None, None);
+    }
     // the Charge Rifle's discharge: `sustained_discharge` and its `charge_loop_layer` added on
     if a.view == Weapon::ChargeRifle
         && let Some(t) = i.cr_discharge
     {
+        // (with the ability's layers: the battery's hands and clips stay over the kunai)
         let o = posing.get_or_insert_with(|| a.ability_out.clone().unwrap_or(ability::Out { show_gun: true, ..Default::default() }));
         o.layers.extend(discharge_layers(t, i.cr_charge, i.ads, m.duck_frac));
     }
     let t0 = Instant::now();
-    let vis = Vis { show, hide, rifle: a.view == Weapon::ChargeRifle };
+    let vis = Vis { show, hide, weapon: a.view };
+    MELEE_POSE.store(melee, std::sync::atomic::Ordering::Relaxed);
+    SN_STIM_POSE.store(sn_stim, std::sync::atomic::Ordering::Relaxed);
     a.posed = with_pack(|p| pose_pack(p, &out, &a.sway, posing.as_ref().or(a.ability_out.as_ref()), vis)).flatten();
     let us = t0.elapsed().as_secs_f32() * 1e6;
     if a.trace_until.is_some_and(|t| Instant::now() < t) {
-        log(trace_line(a, &out, us));
+        let layers = posing.as_ref().map_or(String::new(), |o| o.layers.iter().map(|l| format!("{}{:?} {:.2}@{:.2}", l.samples.first().map_or("", |s| s.0.as_str()), l.mode, l.weight, l.cycle)).collect::<Vec<_>>().join(", "));
+        log(format!("{} | kunai {} sprint_w {:.2} since {:.2} | layers [{layers}]", trace_line(a, &out, us), melee, a.kunai.sprint_w, a.kunai.since_sprint));
     }
+}
+
+/// A weapon's inspect: its clip (Wingman `inspect`, 199 frames; Charge Rifle `inspect_basic`, 336
+/// frames; 30 fps, absolute: bake_wingman.py), and its sounds at their QC frames.
+fn inspect_clip(w: Weapon) -> Option<(&'static str, u32)> {
+    match w {
+        Weapon::Wingman => Some(("wm_inspect_0", 199)),
+        Weapon::ChargeRifle => Some(("cr_inspect_basic_0", 336)),
+        // T012's `inspect_basic` and the R-99's `inspect_new`
+        Weapon::R301 => Some(("inspect_basic_0", 336)),
+        Weapon::R99 => Some(("r9_inspect_new_0", 316)),
+        // `ptpov_vinson.qc` inspect_basic_new
+        Weapon::Flatline => Some(("fl_inspect_basic_new_0", 336)),
+        // `sentinel_base_v_animRig.qc` inspect
+        Weapon::Sentinel => Some(("sn_inspect_0", 336)),
+    }
+}
+
+fn inspect_seconds(w: Weapon) -> f32 {
+    inspect_clip(w).map_or(0.0, |(_, n)| (n - 1) as f32 / 30.0)
+}
+
+fn inspect_sounds(w: Weapon) -> &'static [(u32, &'static str)] {
+    match w {
+        // `wingman_base_v_animRig.qc` inspect
+        Weapon::Wingman => &[
+            (0, "weapon_wingman_inspect_part01"),
+            (24, "weapon_wingman_inspect_part02"),
+            (77, "weapon_wingman_inspect_part03"),
+            (130, "weapon_wingman_inspect_part04"),
+            (158, "weapon_wingman_inspect_end"),
+        ],
+        // `chargerifle_base_v_animRig.qc` inspect_basic
+        Weapon::ChargeRifle => &[(4, "weapon_inspect_sniper_start"), (91, "weapon_inspect_sniper_mid"), (234, "weapon_inspect_sniper_mid"), (315, "weapon_inspect_sniper_end")],
+        // `r99_base_v_animRig.qc` inspect_new (the R-301's: none exported)
+        Weapon::R99 => &[(0, "weapon_r97_inspect")],
+        Weapon::Flatline => &[(0, "weapon_vinson_inspect_basicnew")],
+        // the Charge Rifle's sniper inspect sounds, at the Sentinel's QC frames
+        Weapon::Sentinel => &[(4, "weapon_inspect_sniper_start"), (91, "weapon_inspect_sniper_mid"), (234, "weapon_inspect_sniper_mid"), (315, "weapon_inspect_sniper_end")],
+        Weapon::R301 => &[],
+    }
+}
+
+/// The inspect's layer `t` seconds in: over the graph, faded in and out over FADE-like 0.2 s.
+fn inspect_layer(w: Weapon, t: f32) -> ability::Layer {
+    let (name, _) = inspect_clip(w).unwrap_or(("", 2));
+    let total = inspect_seconds(w).max(1e-3);
+    let weight = (t / 0.2).min((total - t) / 0.2).clamp(0.0, 1.0);
+    ability::Layer { samples: vec![(name.to_string(), 1.0)], cycle: (t / total).clamp(0.0, 1.0), weight, mode: ability::Mode::Over }
+}
+
+/// Key 5: the weapon in the hands plays its inspect (again from the start when it is playing).
+pub fn start_inspect() -> String {
+    let mut g = ANIM.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(a) = g.as_mut() else { return "inspect: no view model".into() };
+    if melee_slot() {
+        // on the run: the sprint twirl, from its start on every press (the user's 2026-10-09 ask, as
+        // Apex does on a sprint)
+        let twirl = a.signals.moving.is_some_and(|m| m.sprinting && !m.sliding);
+        // Apex: a random one of them by weight, every press (again while one plays: the new one
+        // crossfades over it)
+        let crouched = a.signals.moving.is_some_and(|m| m.crouched);
+        let ok: Vec<usize> = (0..KUNAI_INSPECTS.len())
+            .filter(|&k| KUNAI_INSPECTS[k].crouched <= crouched && with_pack(|p| p.clip(KUNAI_INSPECTS[k].clip).is_some()).unwrap_or(false))
+            .collect();
+        let total: u32 = ok.iter().map(|&k| KUNAI_INSPECTS[k].weight).sum();
+        if total == 0 {
+            return "inspect: no kunai inspect in the pack".into();
+        }
+        let mut roll = ((a.started.elapsed().as_nanos() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 33) % total as u64;
+        let k = if twirl { KUNAI_TWIRL } else { ok
+            .iter()
+            .copied()
+            .find(|&k| {
+                let w = KUNAI_INSPECTS[k].weight as u64;
+                if roll < w {
+                    true
+                } else {
+                    roll -= w;
+                    false
+                }
+            })
+            .unwrap_or(ok[0]) };
+        if let Some((old, t)) = a.kunai_inspect.take() {
+            stop_kunai_sounds(old);
+            let w = kunai_inspect_layer(old, t, 1.0).weight;
+            a.kunai_inspect_out = Some((old, t, w, 0.0));
+        }
+        a.kunai_inspect = Some((k, 0.0));
+        for &(frame, n) in KUNAI_INSPECTS[k].sounds {
+            crate::audio::play_in(n, 0.5, frame as f32 / 30.0);
+        }
+        return format!("inspect: {} ({:.1} s)", KUNAI_INSPECTS[k].clip, kunai_inspect_seconds(k));
+    }
+    let w = a.view;
+    let Some((name, _)) = inspect_clip(w) else { return "inspect: none for this weapon".into() };
+    if with_pack(|p| p.clip(name).is_none()).unwrap_or(true) {
+        return format!("inspect: {name} not in the pack");
+    }
+    if let Some((old, _)) = a.inspect {
+        inspect_sounds(old).iter().for_each(|(_, n)| crate::audio::stop(n));
+    }
+    a.inspect = Some((w, 0.0));
+    for &(frame, n) in inspect_sounds(w) {
+        crate::audio::play_in(n, 0.5, frame as f32 / 30.0);
+    }
+    format!("inspect: {name} ({:.1} s)", inspect_seconds(w))
 }
 
 /// The carriers' transforms in the mirrored frame of `jx_c_pov` (x left, y up, z backward: see
@@ -491,6 +933,10 @@ const OFFSET_ADS: Vec3 = Vec3::new(0.0, 0.38, 0.0);
 /// `viewmodel_offset_ads` "0 -8 -0.45").
 const CR_OFFSET_HIP: Vec3 = Vec3::new(0.0, -3.0, -0.75);
 const CR_OFFSET_ADS: Vec3 = Vec3::new(0.0, -8.0, -0.45);
+/// The Wingman's (`mp_weapon_wingman.txt`: no `viewmodel_offset_hip` (0 0 0), `viewmodel_offset_ads`
+/// "0 1.0 0").
+const WM_OFFSET_HIP: Vec3 = Vec3::ZERO;
+const WM_OFFSET_ADS: Vec3 = Vec3::new(0.0, 1.0, 0.0);
 const OFFSET_BACK: f32 = -2.0;
 const DUCK_OFFSET: f32 = -0.751;
 
@@ -504,6 +950,13 @@ fn hold_offset(p: Params, w: Weapon) -> Vec3 {
     let (hip, ads) = match w {
         Weapon::R301 => (OFFSET_HIP, OFFSET_ADS),
         Weapon::ChargeRifle => (CR_OFFSET_HIP, CR_OFFSET_ADS),
+        Weapon::Wingman => (WM_OFFSET_HIP, WM_OFFSET_ADS),
+        // the R-99's (`mp_weapon_r97.txt`: `viewmodel_offset_ads` "0 0 0", no hip one)
+        Weapon::R99 => (Vec3::ZERO, Vec3::ZERO),
+        // the Flatline's (`mp_weapon_vinson.txt`: `viewmodel_offset_hip` "0 -0.5 -0.3", `_ads` "0 0.04 0")
+        Weapon::Flatline => (Vec3::new(0.0, -0.5, -0.3), Vec3::new(0.0, 0.04, 0.0)),
+        // the Sentinel's (`mp_weapon_sentinel.txt`: `viewmodel_offset_ads` "0 0.0 0", no hip one)
+        Weapon::Sentinel => (Vec3::ZERO, Vec3::ZERO),
     };
     let o = hip.lerp(ads, e) + Vec3::new(0.0, OFFSET_BACK, 0.0);
     let duck = DUCK_OFFSET * (p.crouch.clamp(0.0, 1.0) * std::f32::consts::FRAC_PI_2).sin() * (1.0 - a);
@@ -522,25 +975,26 @@ fn camera_base() -> Xf {
 
 /// The sway's pivots in CAMERA_BASE's space (r301_base_v.qc): `SWAY_ROTATE` on `weapon_bone`
 /// (rotate -90 90 0) and `SWAY_ROTATE_ZOOMED` 196.85 units out along `muzzle_flash` (rotate 0 0 90).
-fn sway_pivots(p: &Pack, world: &[Xf]) -> Option<((Vec3, Quat), (Vec3, Quat))> {
+fn sway_pivots(p: &Pack, world: &[Xf], w: Weapon) -> Option<((Vec3, Quat), (Vec3, Quat))> {
     let base_inv = camera_base().inverse().mul(world[p.pov].inverse());
     let at = |b: usize, local: Xf| {
         let x = base_inv.mul(world[b]).mul(local);
         (x.t, x.r)
     };
-    let hip = at(p.weapon?, Xf { t: Vec3::ZERO, r: Quat::from_mat3(&angle_matrix(Vec3::new(-90.0, 90.0, 0.0))) });
-    let zoomed = at(p.gun?, MUZZLE.mul(Xf { t: Vec3::new(196.85, 0.0, 0.0), r: Quat::from_mat3(&angle_matrix(Vec3::new(0.0, 0.0, 90.0))) }));
+    let (gun, weapon) = p.gun_bones(w);
+    let hip = at(weapon?, Xf { t: Vec3::ZERO, r: Quat::from_mat3(&angle_matrix(Vec3::new(-90.0, 90.0, 0.0))) });
+    let zoomed = at(gun?, muzzle_of(w).mul(Xf { t: Vec3::new(196.85, 0.0, 0.0), r: Quat::from_mat3(&angle_matrix(Vec3::new(0.0, 0.0, 90.0))) }));
     Some((hip, zoomed))
 }
 
 /// An ability's layer for bone `b`: its samples (by name) at its cycle, blended by their weights;
 /// with the bone's weights in the first sample (the QC weight list). None: a clip is missing.
-fn blend_named(p: &Pack, l: &ability::Layer, b: usize, nb: usize, rifle: bool) -> Option<(Xf, (f32, f32))> {
+fn blend_named(p: &Pack, l: &ability::Layer, b: usize, nb: usize, weapon: Weapon) -> Option<(Xf, (f32, f32))> {
     let mut x = Xf::IDENTITY;
     let mut sum = 0.0;
     let mut bone_w = (1.0, 1.0);
     for (i, (name, w)) in l.samples.iter().enumerate() {
-        let c = clip_for(p, name, rifle)?;
+        let c = clip_for(p, name, weapon)?;
         if i == 0 {
             bone_w = c.weights.get(b).copied().unwrap_or((1.0, 1.0));
         }
@@ -555,10 +1009,16 @@ fn blend_named(p: &Pack, l: &ability::Layer, b: usize, nb: usize, rifle: bool) -
 /// abilities use: `holster`, `draw`, `switch_to_onehanded`, `fire_onehanded`...) is the rifle's own
 /// `cr_*` when the pack has it (its frames played at the R-301's times: 近似); the props' clips
 /// (`stim_`, `pad_`, `battery_`, `frag_`) and the rifle's as they are.
-fn clip_for<'a>(p: &'a Pack, name: &str, rifle: bool) -> Option<&'a Clip> {
-    let prop = ["stim_", "pad_", "battery_", "frag_", "cr_"].iter().any(|k| name.starts_with(k));
-    if rifle && !prop {
-        if let Some(c) = p.clip(&format!("cr_{name}")) {
+fn clip_for<'a>(p: &'a Pack, name: &str, w: Weapon) -> Option<&'a Clip> {
+    let prop = ["stim_", "pad_", "battery_", "frag_", "cr_", "wm_", "kn_"].iter().any(|k| name.starts_with(k));
+    // the kunai in the hands (the holstered mode): an ability's weapon clips are the kunai's own
+    // (`kn_draw`, `kn_holster`...) or none (the gun's arms over the kunai showed a gun's grip: the
+    // user, 2026-10-09, tossing the pad)
+    if !prop && MELEE_POSE.load(std::sync::atomic::Ordering::Relaxed) {
+        return p.clip(&format!("kn_{name}"));
+    }
+    if w != Weapon::R301 && !prop {
+        if let Some(c) = p.clip(&format!("{}{name}", w.prefix())) {
             return Some(c);
         }
     }
@@ -567,16 +1027,29 @@ fn clip_for<'a>(p: &'a Pack, name: &str, rifle: bool) -> Option<&'a Clip> {
 
 /// An ability's layers over the graph's pose, in order: the R-301's own clips over everything, the
 /// offhand's clips bone by bone by their weight lists, the additive ones added on by them.
-fn apply_ability(p: &Pack, ab: &ability::Out, local: &mut [Xf], rifle: bool) {
+fn apply_ability(p: &Pack, ab: &ability::Out, local: &mut [Xf], w: Weapon) {
     let nb = local.len();
+    let sn_stim = SN_STIM_POSE.load(std::sync::atomic::Ordering::Relaxed);
+    let spine = p.names.iter().position(|n| n == "def_c_spineC");
+    // (relative to `jx_c_pov`, which the view model is drawn from)
+    let before = if sn_stim { spine.map(|s| world_of(p, local, p.pov).inverse().mul(world_of(p, local, s))) } else { None };
     for l in &ab.layers {
         for (b, x) in local.iter_mut().enumerate() {
-            let Some((s, (wt, wr))) = blend_named(p, l, b, nb, rifle) else { break };
+            let Some((s, (wt, wr))) = blend_named(p, l, b, nb, w) else { break };
             *x = match l.mode {
                 ability::Mode::Over => Xf { t: x.t.lerp(s.t, l.weight), r: x.r.slerp(s.r, l.weight).normalize() },
                 ability::Mode::Masked => Xf { t: x.t.lerp(s.t, wt * l.weight), r: x.r.slerp(s.r, wr * l.weight).normalize() },
                 ability::Mode::Add => Xf { t: x.t + s.t * (wt * l.weight), r: (x.r * Quat::IDENTITY.slerp(s.r, wr * l.weight)).normalize() },
             };
+        }
+    }
+    // the Sentinel with the stim: the gun and the right arm back where the spine had them
+    if let (Some(s), Some(before)) = (spine, before) {
+        let fix = world_of(p, local, s).inverse().mul(world_of(p, local, p.pov)).mul(before);
+        for (b, n) in p.names.iter().enumerate() {
+            if p.parents[b] == s as i16 && (n == "def_r_clav" || n.starts_with("sn:")) {
+                local[b] = fix.mul(local[b]);
+            }
         }
     }
 }
@@ -599,6 +1072,13 @@ fn weapon_swap(view: Weapon, rifle: bool, crouch: f32) -> Option<(Vec<(String, f
         };
     }
     let phase = super::weapons::phase();
+    // the kunai's own put-away and pull-out (the holstered mode)
+    match phase {
+        Phase::Holstering { slot: Slot::Melee, cycle } => return Some((vec![("kn_holster_0".to_string(), 1.0)], cycle, cycle < 1.0)),
+        Phase::Drawing { slot: Slot::Melee, cycle, .. } => return Some((draw("kn_draw"), cycle, true)),
+        Phase::Ready(Slot::Melee) => return None,
+        _ => {}
+    }
     if rifle && !matches!(phase, Phase::Ready(Slot::R301) | Phase::Holstering { slot: Slot::R301, .. } | Phase::Drawing { slot: Slot::R301, .. }) {
         return None;
     }
@@ -614,6 +1094,26 @@ fn with_swap(ab: Option<&ability::Out>, swap: Option<(Vec<(String, f32)>, f32)>)
     let mut out = ab.cloned().unwrap_or_default();
     out.layers.insert(0, ability::Layer { samples, cycle: cycle.clamp(0.0, 1.0), weight: 1.0, mode: ability::Mode::Over });
     Some(out)
+}
+
+/// The Sentinel's `rechamber` (64 frames, additive; `sentinel_base_v_animRig.qc`) played over
+/// this many seconds (retail: 2.1 s; sped up for the mod's shot every 0.8 s: ready to fire, frame
+/// 50, at the next shot; the bolt's back and front at frames 12 and 22), and its QC sounds.
+const RECHAMBER_SECONDS: f32 = 1.0;
+const RECHAMBER_BLEND: f32 = 0.08;
+const RECHAMBER_SOUNDS: &[(u32, &str)] = &[(12, "weapon_sentinel_boltback"), (12, "weapon_sentinel_boltback_layer1"), (22, "weapon_sentinel_boltfront")];
+
+/// The bolt's layer `t` seconds in: by `ads_blend` and `crouchFraction`, in over 0.05 s, out over
+/// its last 0.15 s.
+fn rechamber_layer(t: f32, ads: f32, crouch: f32) -> ability::Layer {
+    let (a, c) = (ads.clamp(0.0, 1.0), crouch.clamp(0.0, 1.0));
+    let samples: Vec<(String, f32)> = [(0, (1.0 - a) * (1.0 - c)), (1, a * (1.0 - c)), (2, (1.0 - a) * c), (3, a * c)]
+        .into_iter()
+        .filter(|s| s.1 > 0.0)
+        .map(|(k, w)| (format!("sn_rechamber_{k}"), w))
+        .collect();
+    let weight = (t / 0.05).min((RECHAMBER_SECONDS - t) / 0.15).clamp(0.0, 1.0);
+    ability::Layer { samples, cycle: (t / RECHAMBER_SECONDS).clamp(0.0, 1.0), weight, mode: ability::Mode::Add }
 }
 
 /// The Charge Rifle's `sustained_discharge` (105 frames, 30 fps, looping, by ads x crouch) and its
@@ -645,8 +1145,8 @@ fn groups_shown(ab: Option<&ability::Out>, frame: u64, view: Weapon) -> [bool; G
         Some(o) => (o.show_gun, o.show_stim, o.show_pad, o.show_battery, o.show_frag),
         None => (true, false, false, false, false),
     };
-    let rifle = view == Weapon::ChargeRifle;
-    let mut s = [true, gun && !rifle, stim, pad, battery, gun && rifle, frag, false, false];
+    let held = gun_group(view);
+    let mut s = [true, gun && held == 1, stim, pad, battery, gun && held == RIFLE, frag, false, false, gun && held == WINGMAN, gun && held == R99G, false, gun && held == FLATLINEG, gun && held == SENTINELG];
     let d = dev_state();
     for (g, f) in d.force.iter().enumerate() {
         if let Some(f) = f {
@@ -659,13 +1159,46 @@ fn groups_shown(ab: Option<&ability::Out>, frame: u64, view: Weapon) -> [bool; G
     s
 }
 
+/// The carrier group of a weapon's model: 1 the R-301, 5 the Charge Rifle, 9 the Wingman.
+fn gun_group(w: Weapon) -> usize {
+    match w {
+        Weapon::R301 => 1,
+        Weapon::ChargeRifle => RIFLE,
+        Weapon::Wingman => WINGMAN,
+        Weapon::R99 => R99G,
+        Weapon::Flatline => FLATLINEG,
+        Weapon::Sentinel => SENTINELG,
+    }
+}
+
+/// The kunai is the hands' this frame (`clip_for`).
+static MELEE_POSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Set before pose_pack: the Sentinel with the stim. The stim's clips turn the body (hip, spine)
+/// with the one-handed sprint in mind; the Sentinel and the right arm hang off the spine, so its
+/// barrel pointed left on the run (the user, 2026-10-10). Left alone, the body put the injector
+/// in the right side. So the body turns as the stim has it (the left arm's stab lands), and the
+/// gun and the right arm are carried back to where the body without the stim had them.
+static SN_STIM_POSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// A bone's world transform from local ones.
+fn world_of(p: &Pack, local: &[Xf], b: usize) -> Xf {
+    let mut x = local[b];
+    let mut i = p.parents[b];
+    while i >= 0 {
+        x = local[i as usize].mul(x);
+        i = p.parents[i as usize];
+    }
+    x
+}
+
 /// What shows this frame and how the rest is put away.
 #[derive(Clone, Copy)]
 struct Vis {
     show: [bool; GROUPS],
     hide: Hide,
-    /// the Charge Rifle in the hands: the abilities' weapon clips are its `cr_*` ones
-    rifle: bool,
+    /// the weapon in the hands: the abilities' weapon clips are its own (`cr_*`, `wm_*`) when it has them
+    weapon: Weapon,
 }
 
 fn pose_pack(p: &Pack, o: &Out, sway: &Sway, ab: Option<&ability::Out>, vis: Vis) -> Option<Posed> {
@@ -694,7 +1227,7 @@ fn pose_pack(p: &Pack, o: &Out, sway: &Sway, ab: Option<&ability::Out>, vis: Vis
         local.push(x);
     }
     if let Some(ab) = ab {
-        apply_ability(p, ab, &mut local, vis.rifle);
+        apply_ability(p, ab, &mut local, vis.weapon);
     }
     let mut world: Vec<Xf> = Vec::with_capacity(nb);
     for (&l, &parent) in local.iter().zip(&p.parents) {
@@ -703,7 +1236,7 @@ fn pose_pack(p: &Pack, o: &Out, sway: &Sway, ab: Option<&ability::Out>, vis: Vis
     let pov_inv = world[p.pov].inverse();
     // the bob and sway matrix (CAMERA_BASE's axes), in `jx_c_pov`'s
     let base = camera_base();
-    let swayed = sway_pivots(p, &world).map_or(Xf::IDENTITY, |(hip, zoomed)| {
+    let swayed = sway_pivots(p, &world, o.w).map_or(Xf::IDENTITY, |(hip, zoomed)| {
         let (r, t) = sway.matrix(hip, zoomed);
         base.mul(Xf { t, r }).mul(base.inverse())
     });
@@ -726,20 +1259,25 @@ fn pose_pack(p: &Pack, o: &Out, sway: &Sway, ab: Option<&ability::Out>, vis: Vis
             let m = mirror(Xf { t: m.t * INCH, r: m.r }).mul(c.er_bind);
             match (shown, vis.hide) {
                 (true, _) | (false, Hide::Posed) => (m.t, m.r, at, shown),
-                (false, Hide::Hand) => (if matches!(c.group as usize, 1 | RIFLE | FRAG) { right } else { left }, Quat::IDENTITY, at, false),
+                (false, Hide::Hand) => (if matches!(c.group as usize, 1 | RIFLE | FRAG | WINGMAN | R99G | KUNAI | FLATLINEG | SENTINELG) { right } else { left }, Quat::IDENTITY, at, false),
                 (false, Hide::Eye) => (Vec3::ZERO, Quat::IDENTITY, at, false),
                 (false, Hide::Behind) => (Vec3::new(0.0, 0.0, 20.0), Quat::IDENTITY, at, false),
             }
         })
         .collect();
     let shown = |g: usize| vis.show.get(g).copied().unwrap_or(false);
-    let muzzle_view = match (p.cr_gun, p.gun) {
-        (Some(cr), _) if shown(5) => Some(held.mul(world[cr]).mul(CR_MUZZLE)),
-        (_, Some(g)) if shown(1) => Some(held.mul(world[g]).mul(MUZZLE)),
+    let muzzle_view = match (p.cr_gun, p.wm_gun, p.r9_gun, p.gun) {
+        (Some(cr), _, _, _) if shown(RIFLE) => Some(held.mul(world[cr]).mul(CR_MUZZLE)),
+        (_, Some(wm), _, _) if shown(WINGMAN) => Some(held.mul(world[wm]).mul(WM_MUZZLE)),
+        (_, _, Some(r9), _) if shown(R99G) => Some(held.mul(world[r9]).mul(R9_MUZZLE)),
+        _ if shown(FLATLINEG) && p.fl_gun.is_some() => p.fl_gun.map(|fl| held.mul(world[fl]).mul(FL_MUZZLE)),
+        _ if shown(SENTINELG) && p.sn_gun.is_some() => p.sn_gun.map(|sn| held.mul(world[sn]).mul(SN_MUZZLE)),
+        (_, _, _, Some(g)) if shown(1) => Some(held.mul(world[g]).mul(MUZZLE)),
         _ => None,
     }
     .map(|m| mirror_point(m.t * INCH));
-    Some(Posed { carriers, camera_turn: pov_inv.mul(world[p.camera]).r, muzzle: p.gun.map(|g| pov_inv.mul(world[g]).mul(MUZZLE)), muzzle_view })
+    let gun = p.gun_bones(o.w).0;
+    Some(Posed { carriers, camera_turn: pov_inv.mul(world[p.camera]).r, muzzle: gun.map(|g| pov_inv.mul(world[g]).mul(muzzle_of(o.w))), muzzle_view })
 }
 
 /// Apex's camera axes (x left, y up, z forward) as (forward, left, up).
@@ -833,12 +1371,12 @@ pub fn dev(args: &[&str]) -> String {
         }
         ["force", g, v] => match (group(Some(g)), *v) {
             (Some(g), "show" | "hide" | "auto") => d.force[g] = (*v != "auto").then_some(*v == "show"),
-            _ => return "usage: fp force <group 0-8> show|hide|auto".into(),
+            _ => return "usage: fp force <group 0-10> show|hide|auto".into(),
         },
         ["flip", "off"] => d.flip = None,
         ["flip", g, n] => match (group(Some(g)), n.parse::<u64>().ok().filter(|&n| n > 0)) {
             (Some(g), Some(n)) => d.flip = Some((g as u8, n)),
-            _ => return "usage: fp flip <group 0-8> <frames> | off".into(),
+            _ => return "usage: fp flip <group 0-10> <frames> | off".into(),
         },
         ["play", "stim", f] | ["play", "pad", f] => {
             let kind = match (args[1], f.parse::<usize>().ok()) {
@@ -914,7 +1452,7 @@ mod tests {
         let Ok(d) = std::fs::read(&path) else { return };
         let p = pack::parse(&d).unwrap();
         const DT: f32 = 1.0 / 60.0;
-        let turn = |g: &Graph| muzzle_and_turn(&pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, rifle: false }).unwrap()).1;
+        let turn = |g: &Graph| muzzle_and_turn(&pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, weapon: Weapon::R301 }).unwrap()).1;
         let range = |v: &[Vec3], k: usize| v.iter().fold((f32::MAX, f32::MIN), |(lo, hi), t| (lo.min(t[k]), hi.max(t[k])));
         let moving = |f: &dyn Fn(&mut graph::Moving)| {
             let mut m = graph::Moving::default();
@@ -1000,7 +1538,7 @@ mod tests {
             let l = blend(&clips, b, base.cycle, nb, false);
             world.push(if p.parents[b] >= 0 { world[p.parents[b] as usize].mul(l) } else { l });
         }
-        let (hip, zoomed) = sway_pivots(&p, &world).unwrap();
+        let (hip, zoomed) = sway_pivots(&p, &world, Weapon::R301).unwrap();
         const RAMP: [f32; 11] = [0.0, 0.0, 41.67, 83.33, 125.0, 132.5, 140.0, 147.5, 155.0, 162.5, 170.0];
         let mut s = Sway::default();
         let mut frames = Vec::new();
@@ -1045,7 +1583,7 @@ mod tests {
         let p = pack::parse(&d).unwrap();
         const DT: f32 = 1.0 / 60.0;
         let smooth = |r: f32| r * r * (3.0 - 2.0 * r);
-        let turn = |g: &Graph| muzzle_and_turn(&pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, rifle: false }).unwrap()).1;
+        let turn = |g: &Graph| muzzle_and_turn(&pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, weapon: Weapon::R301 }).unwrap()).1;
         let emit = |name: &str, k: usize, t: Vec3| println!("{name} {k} {:.4} {:.4} {:.4}", t.x, t.y, t.z);
 
         let mut g = Graph::new();
@@ -1105,7 +1643,7 @@ mod tests {
                             assert!(p.clips.iter().any(|c| &c.name == name), "{kind:?}: clip {name} not in the pack");
                         }
                     }
-                    let posed = pose_pack(&p, &g.out(), &Sway::default(), Some(&out), Vis { show: groups_shown(Some(&out), 0, Weapon::R301), hide: Hide::Hand, rifle: false }).unwrap();
+                    let posed = pose_pack(&p, &g.out(), &Sway::default(), Some(&out), Vis { show: groups_shown(Some(&out), 0, Weapon::R301), hide: Hide::Hand, weapon: Weapon::R301 }).unwrap();
                     for (c, x) in p.carriers.iter().zip(&posed.carriers).filter(|(_, x)| !x.3) {
                         let g = c.group as usize;
                         nearest[g] = nearest[g].min(-x.0.z);
@@ -1153,14 +1691,14 @@ mod tests {
             names.extend(l.samples.iter().map(|s| s.0.clone()));
         }
         for n in &names {
-            assert!(clip_for(&p, n, true).is_some(), "clip {n} not in the pack");
+            assert!(clip_for(&p, n, Weapon::ChargeRifle).is_some(), "clip {n} not in the pack");
         }
         // the rifle at rest: its carriers in the hip view, the R-301's hidden (collapsed)
         let mut g = Graph::new_for(Weapon::ChargeRifle);
         g.step(1.0 / 60.0, &Signals::default());
         let show = groups_shown(None, 0, Weapon::ChargeRifle);
         assert!(show[RIFLE] && !show[1]);
-        let posed = pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show, hide: Hide::Hand, rifle: true }).unwrap();
+        let posed = pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show, hide: Hide::Hand, weapon: Weapon::ChargeRifle }).unwrap();
         let v = (35f32.to_radians().tan() * 0.75).atan();
         let (tv, th) = (v.tan(), v.tan() * 16.0 / 9.0);
         let in_view = |at: Vec3| at.z < -0.05 && (at.y / -at.z).abs() < tv && (at.x / -at.z).abs() < th;
@@ -1169,6 +1707,61 @@ mod tests {
         assert!(p.carriers.iter().zip(&posed.carriers).filter(|(c, _)| c.group == 1).all(|(_, x)| !x.3));
         assert!(posed.muzzle_view.is_some(), "the rifle's muzzle");
         println!("T022 pack: {} bones, {} carriers, {} clips; rifle carriers in view {rifle_in_view}; {} clip names checked", p.names.len(), p.carriers.len(), p.clips.len(), names.len());
+    }
+
+    /// The Wingman's pack (tools/apexpov/bake_wingman.py, if generated): its sequences as the graph's
+    /// table has them, the switch's and the abilities' weapon clips found as `wm_*`, and at rest (hip,
+    /// then aimed) the pistol in view with its muzzle, the R-301's carriers hidden.
+    #[test]
+    fn wingman_in_its_pack() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("apex-data/pov/octane_wingman/fuse_pov.anim");
+        let Ok(d) = std::fs::read(&path) else { return };
+        let p = pack::parse(&d).unwrap();
+        assert!(p.has_wingman() && p.has_rifle() && p.has_r99() && p.has_flatline() && p.has_sentinel(), "{} clips", p.clips.len());
+        for w in [Weapon::Wingman, Weapon::R99, Weapon::Flatline, Weapon::Sentinel] {
+            for s in graph::Seq::ALL {
+                let def = s.def_in(w);
+                for (k, &(frames, fps)) in def.samples.iter().enumerate() {
+                    let c = p.sample_in(s, k, w).unwrap_or_else(|| panic!("{}_{k} missing", def.name));
+                    assert_eq!((c.frames as u32, c.fps), (frames, fps), "{}_{k}", def.name);
+                }
+            }
+        }
+        for n in ["holster_0", "draw_0", "draw_1"] {
+            assert!(clip_for(&p, n, Weapon::R99).is_some_and(|c| c.name == format!("r9_{n}")), "r9_{n}");
+        }
+        for w in [Weapon::Wingman, Weapon::ChargeRifle, Weapon::R99, Weapon::R301] {
+            let (name, frames) = inspect_clip(w).unwrap();
+            let c = p.clip(name).unwrap_or_else(|| panic!("{name} missing"));
+            assert!(c.frames as u32 == frames && c.fps == 30.0 && !c.additive, "{name}");
+            let l = inspect_layer(w, 1.0);
+            assert!(l.weight == 1.0 && l.cycle > 0.0 && l.cycle < 1.0);
+        }
+        for n in ["holster_0", "draw_0", "draw_1", "switch_to_onehanded_0", "idle_onehanded_0", "fire_onehanded_0"] {
+            assert!(clip_for(&p, n, Weapon::Wingman).is_some_and(|c| c.name == format!("wm_{n}")), "wm_{n}");
+        }
+        let v = (35f32.to_radians().tan() * 0.75).atan();
+        let (tv, th) = (v.tan(), v.tan() * 16.0 / 9.0);
+        let in_view = |at: Vec3| at.z < -0.05 && (at.y / -at.z).abs() < tv && (at.x / -at.z).abs() < th;
+        for (w, group, muzzle) in [(Weapon::Wingman, WINGMAN, WM_MUZZLE), (Weapon::R99, R99G, R9_MUZZLE), (Weapon::Flatline, FLATLINEG, FL_MUZZLE), (Weapon::Sentinel, SENTINELG, SN_MUZZLE)] {
+        let _ = muzzle;
+        for ads in [0.0, 1.0] {
+            let mut g = Graph::new_for(w);
+            for _ in 0..60 {
+                g.step(1.0 / 60.0, &Signals { ads, ..Default::default() });
+            }
+            let show = groups_shown(None, 0, w);
+            assert!(show[group] && !show[1] && !show[RIFLE]);
+            let posed = pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show, hide: Hide::Hand, weapon: w }).unwrap();
+            let shown = p.carriers.iter().zip(&posed.carriers).filter(|(c, x)| c.group as usize == group && x.3 && in_view(x.2)).count();
+            assert!(shown > 0, "{w:?} ads {ads}: no carrier in view");
+            assert!(p.carriers.iter().zip(&posed.carriers).filter(|(c, _)| c.group == 1).all(|(_, x)| !x.3));
+            let m = posed.muzzle_view.expect("the Wingman's muzzle");
+            println!("{w:?} ads {ads}: {shown} carriers in view; muzzle {m:.3} (m, mirrored pov frame)");
+            // (the Sentinel's long barrel: its muzzle 1.2 m out)
+            assert!(m.z < -0.1 && m.length() < 1.5, "muzzle {m}");
+        }
+        }
     }
 
     /// U3: with the Charge Rifle out (no view model of its own yet) the R-301's put-away is held at
@@ -1187,7 +1780,7 @@ mod tests {
         let in_view = |at: Vec3| at.z < -0.05 && (at.y / -at.z).abs() < tv && (at.x / -at.z).abs() < th;
         let posed_at = |cycle: f32| {
             let out = with_swap(None, Some((vec![("holster_0".to_string(), 1.0)], cycle))).unwrap();
-            pose_pack(&p, &g.out(), &Sway::default(), Some(&out), Vis { show: [true; GROUPS], hide: Hide::Hand, rifle: false }).unwrap()
+            pose_pack(&p, &g.out(), &Sway::default(), Some(&out), Vis { show: [true; GROUPS], hide: Hide::Hand, weapon: Weapon::R301 }).unwrap()
         };
         let visible = |posed: &Posed| p.carriers.iter().zip(&posed.carriers).filter(|(c, x)| c.group <= 1 && in_view(x.2)).map(|(c, _)| c.bone.clone()).collect::<Vec<_>>();
         let start = visible(&posed_at(0.0));
@@ -1209,7 +1802,7 @@ mod tests {
         const DT: f32 = 1.0 / 60.0;
         let mut g = Graph::new();
         g.step(DT, &Signals::default());
-        let rest = pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, rifle: false }).unwrap();
+        let rest = pose_pack(&p, &g.out(), &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, weapon: Weapon::R301 }).unwrap();
         let kinds: Vec<ability::Kind> = (0..ability::FLOURISHES.len()).map(ability::Kind::Stim).chain([ability::Kind::Pad]).collect();
         let mut least = vec![vec![(f32::MAX, 0.0f32); kinds.len()]; p.carriers.len()];
         for (k, kind) in kinds.iter().enumerate() {
@@ -1219,7 +1812,7 @@ mod tests {
                 g.step(DT, &Signals::default());
                 ab.step(DT, ability::Params::default());
                 let out = ab.out(ability::Params::default());
-                let posed = pose_pack(&p, &g.out(), &Sway::default(), Some(&out), Vis { show: [true; GROUPS], hide: Hide::Hand, rifle: false }).unwrap();
+                let posed = pose_pack(&p, &g.out(), &Sway::default(), Some(&out), Vis { show: [true; GROUPS], hide: Hide::Hand, weapon: Weapon::R301 }).unwrap();
                 for (i, x) in posed.carriers.iter().enumerate() {
                     if -x.2.z < least[i][k].0 {
                         least[i][k] = (-x.2.z, ab.t);
@@ -1244,7 +1837,7 @@ mod tests {
         let mut o = g.out();
         // without the additive layers: the bare hip pose (ads_out at its end)
         o.add.clear();
-        let posed = pose_pack(&p, &o, &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, rifle: false }).unwrap();
+        let posed = pose_pack(&p, &o, &Sway::default(), None, Vis { show: [true; GROUPS], hide: Hide::Hand, weapon: Weapon::R301 }).unwrap();
         let (muzzle, turn) = muzzle_and_turn(&posed);
         let (t, r) = muzzle.unwrap();
         assert!((t - Vec3::new(32.96, 2.93, -3.52)).length() < 0.02, "{t}");

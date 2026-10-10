@@ -1,5 +1,9 @@
 use crate::{MoveParams, ParamsError, PoseParams, Vec3, World};
 
+/// Lumps up to this share of the step height (raw units above the feet) are ridden over at
+/// LUMP_RIDE_ANGLE degrees rather than stepped (推断: the values are ours, not Apex's).
+const LOW_LUMP_FRACTION: f32 = 0.5;
+const LUMP_RIDE_ANGLE: f32 = 40.0;
 pub const FIXED_DT: f32 = 1.0 / 60.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -321,6 +325,11 @@ impl Controller {
         self.refresh_pose();
         old
     }
+    /// The caller's speed multiplier from now on (the holstered mode's faster run: er-apex weapons.rs).
+    pub fn set_speed_multiplier(&mut self, m: f32) {
+        self.params.speed_multiplier = Some(m);
+    }
+
     pub fn params(&self) -> &MoveParams {
         &self.params
     }
@@ -401,6 +410,28 @@ impl Controller {
         self.apex_y = self.state.position.y + velocity.y.max(0.0).powi(2) / (2.0 * g);
         self.double_jump = double_jump;
         self.events.launched = true;
+        Ok(())
+    }
+
+    /// Sets the velocity for a pull (raw units/s; Pathfinder's grapple, the host steering it each
+    /// frame): off the ground, any slide ended, gravity scaled as a launch's (until landing), but no
+    /// launch event and no double jump.
+    pub fn pull(&mut self, velocity: Vec3, gravity_scale: f32) -> Result<(), ParamsError> {
+        if velocity.iter().any(|v| !v.is_finite()) || !(gravity_scale.is_finite() && gravity_scale > 0.0) {
+            return Err(ParamsError("invalid pull"));
+        }
+        self.state.velocity = velocity;
+        if self.state.grounded && velocity.y > 0.0 {
+            self.state.grounded = false;
+            self.state.ground_normal = None;
+        }
+        self.jumped_since_ground = true;
+        self.end_slide();
+        self.gravity_scale = gravity_scale;
+        self.launch_time = self.time;
+        let g = self.air_gravity();
+        self.apex_y = self.state.position.y + velocity.y.max(0.0).powi(2) / (2.0 * g);
+        self.double_jump = false;
         Ok(())
     }
 
@@ -628,6 +659,7 @@ impl Controller {
         let t_slide = std::time::Instant::now();
         let (mut position, normals, lowest_block) =
             self.slide_move(start, delta, pose, grounded_for_motion);
+        let mut did_step = false;
         #[cfg(feature = "profile")]
         crate::profile::add(&crate::profile::SLIDE_NS, t_slide);
         // Stepping up only where something low blocked the way: a wall touched only above the
@@ -643,6 +675,7 @@ impl Controller {
             let t_step = std::time::Instant::now();
             if let Some(step) = self.try_step(start, delta, pose, position) {
                 position = step;
+                did_step = true;
                 // a sliding climb costs speed by the step's height (§18)
                 let climbed = position.y - start.y;
                 if self.state.sliding && climbed > 0.0 {
@@ -680,8 +713,13 @@ impl Controller {
         crate::profile::add(&crate::profile::GROUND_NS, t_ground);
         // Successful stepping supersedes the blocked low path.
         let (skin, slope_cos) = (self.params.skin, self.slope_cos());
+        // A step taken replaces the low path whole: none of its contacts clip the velocity. The
+        // stair edge it ran into is a slanted contact (the capsule's round bottom on the edge),
+        // walkable by its slope, and clipping against it threw him up and halved his speed on
+        // every step: on stairs he hopped and stopped (2026-10-10).
         let stepped = |normal: &Vec3| {
-            grounded_for_motion && position.y > start.y + skin && normal.y.abs() < slope_cos
+            did_step
+                || (grounded_for_motion && position.y > start.y + skin && normal.y.abs() < slope_cos)
         };
         // Clip the velocity against every contact plane the way the displacement was (a single
         // pass left gravity's share in a crease, where it grew every tick).
@@ -1456,13 +1494,28 @@ impl Controller {
             }
             position += remaining * hit.fraction;
             remaining *= 1.0 - hit.fraction;
-            if hit.surface_normal.y < self.slope_cos() {
+            // an edge or corner ahead and above the feet (the capsule's round bottom on a stair's
+            // nose: the contact slants, the face does not): a wall to step over, not a slope to
+            // ride up (on stairs he rode every edge, was thrown up and stopped, 2026-10-10)
+            let edge = block_uphill_walls
+                && hit.point.y - position.y > self.params.skin * 2.0
+                && hit.normal.dot(&hit.surface_normal) < 0.99;
+            if hit.surface_normal.y < self.slope_cos() || edge {
                 lowest_block = lowest_block.min(hit.point.y - position.y);
             }
             let mut normal = hit.normal;
-            if block_uphill_walls
+            // a low lump under the feet (a bone, a stone: Elden Ring's floors are full of them;
+            // each one stopped him dead, 2026-10-10): ridden over as a walkable slope, not a wall
+            let low_lump = block_uphill_walls
+                && hit.point.y - position.y <= self.params.step_height * LOW_LUMP_FRACTION
+                && horizontal(hit.normal).norm_squared() > 1.0e-8;
+            if low_lump {
+                let h = horizontal(hit.normal).normalize();
+                let (sin, cos) = LUMP_RIDE_ANGLE.to_radians().sin_cos();
+                normal = (h * sin + Vec3::y() * cos).normalize();
+            } else if block_uphill_walls
                 && normal.y > 0.0
-                && (hit.surface_normal.y < self.slope_cos() || normal.y < self.slope_cos())
+                && (hit.surface_normal.y < self.slope_cos() || normal.y < self.slope_cos() || edge)
             {
                 normal = horizontal(normal).try_normalize(1.0e-6).unwrap_or(normal);
             }
@@ -1506,19 +1559,29 @@ impl Controller {
         let raised = start + Vec3::y() * rise;
         let (across, _, _) = self.slide_move(raised, horizontal(delta), pose, true);
         let drop = rise + self.params.step_height + self.params.skin * 2.0;
-        let hit = self.world.sweep(
-            across,
-            -Vec3::y() * drop,
-            pose.radius,
-            pose.height,
-            self.params.skin,
-        )?;
-        if hit.surface_normal.y < self.slope_cos()
-            || hit.point.y - start.y > self.params.step_height + self.params.skin * 3.0
-        {
-            return None;
-        }
-        let landing = across - Vec3::y() * (drop * hit.fraction);
+        // down onto a walkable face first, as `probe_ground` does: on stairs the capsule coming
+        // down touched the next riser first (a wall face) and the step was refused, so the feet
+        // caught on every step (Elden Ring's stairs, 2026-10-10); else onto whatever is there (a
+        // stone's crest, a bone: no walkable face on top, each one stopped him); clear either way
+        let max_rise = self.params.step_height + self.params.skin * 3.0;
+        let clear = |hit: &crate::world::Hit| {
+            let landing = across - Vec3::y() * (drop * hit.fraction);
+            (hit.point.y - start.y <= max_rise
+                && !self.world.overlaps(landing, pose.radius, pose.height, self.params.skin * 2.0))
+            .then_some(landing)
+        };
+        let walkable = self
+            .world
+            .sweep_support(across, -Vec3::y() * drop, pose.radius, pose.height, self.params.skin, self.slope_cos())
+            .filter(|hit| hit.surface_normal.y >= self.slope_cos())
+            .and_then(|hit| clear(&hit));
+        let landing = match walkable {
+            Some(l) => l,
+            None => self
+                .world
+                .sweep(across, -Vec3::y() * drop, pose.radius, pose.height, self.params.skin)
+                .and_then(|hit| clear(&hit))?,
+        };
         if landing.y - start.y > self.params.step_height + self.params.skin * 3.0
             || landing.y < start.y - self.params.step_height - self.params.skin * 3.0
             || horizontal(landing - start).norm_squared()

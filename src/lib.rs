@@ -7,6 +7,7 @@
 mod audio;
 mod camera;
 mod fe;
+mod fps;
 mod dev;
 mod explore;
 mod firstperson;
@@ -45,6 +46,8 @@ fn frame(data: &FD4TaskData) {
     spike::quickboot::update();
     spike::lethal::update();
     spike::gun::update(dt);
+    // the Sentinel's homing rounds in flight (homing.rs)
+    spike::homing::update(dt);
     spike::stats::update();
     spike::octane::update(dt);
     spike::battery::update();
@@ -85,6 +88,8 @@ fn boot() {
         return;
     }
     log(format!("game version ok; dev channel {}", if dev::enabled() { "on" } else { "off" }));
+    // ini fps_limit: the game's frame cap
+    fps::install();
     unsafe { input::install() };
     // the mouse is not held in the window while the game is in the background
     unsafe { cursor::install() };

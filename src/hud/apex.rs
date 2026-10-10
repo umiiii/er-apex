@@ -74,6 +74,26 @@ const CHARGE_RIFLE_ICON: &str = "rui/weapon_icons/r5/weapon_charge_rifle";
 const SNIPER_BADGE: &str = "rui/hud/gametype_icons/survival/sur_ammo_sniper";
 const SINGLE_SHOT: &str = "rui/hud/weapon_toggle/single_shot";
 const EMPTY_STOCK_SNIPER: &str = "rui/pilot_loadout/mods/empty_stock_sniper";
+/// The Wingman in slot 1 (in the R-301's place; tools/apexhud/export_wingman.py): its `hud_icon`
+/// (the retail weapon settings), retail's `ammo_pool_type` "sniper", semi-auto (single shot), its
+/// empty slots the magazine and the sight (推断: the pistol's attachments as retail's loot has them).
+const WINGMAN_ICON: &str = "rui/weapon_icons/r5/weapon_wingman";
+/// The R-99 (the weapon wheel; tools/apexhud/export_wingman.py `--weapon r99`): its `hud_icon`, light
+/// ammo, automatic, its empty slots the barrel, the magazine, the sight and the stock.
+const R99_ICON: &str = "rui/weapon_icons/r5/weapon_r97";
+const R99_SLOTS: [&str; 4] = EMPTY_SLOTS;
+/// The VK-47 Flatline (the weapon wheel; tools/apexhud/export_wingman.py `--weapon flatline`): its
+/// `hud_icon`, heavy ammo (its colour; the R-301's badge stands in: 推断), automatic, the R-301's slots.
+const FLATLINE_ICON: &str = "rui/weapon_icons/r5/weapon_flatline";
+/// The kunai (a swing in the holstered mode): its melee skin's `equipImage` (export_wingman.py
+/// `--weapon kunai`), the kill feed's icon for it.
+/// The Sentinel (the weapon wheel; tools/apexhud/export_wingman.py `--weapon sentinel`): its
+/// `hud_icon`, sniper ammo, automatic here (the user's), the sniper's slots.
+const SENTINEL_ICON: &str = "rui/weapon_icons/r5/weapon_sentinel";
+/// Pathfinder's grapple (Q's other ability: spike/grapple.rs): its item flavour's icon
+/// (`settings/itemflav/ability/pathfinder_tac_grapple.rpak`; export_wingman.py `--weapon grapple`).
+pub const GRAPPLE_ICON: &str = "rui/hud/tactical_icons/tactical_pathfinder";
+const KUNAI_ICON: &str = "rui/menu/buttons/melee_skins/wraith_kunai";
 pub const IMAGES: &[(&str, tex::Kind)] = &[
     (BATTERY_ICON, tex::Kind::Color),
     (AMMO_BADGE, tex::Kind::Color),
@@ -89,6 +109,12 @@ pub const IMAGES: &[(&str, tex::Kind)] = &[
     (SNIPER_BADGE, tex::Kind::Color),
     (SINGLE_SHOT, tex::Kind::Color),
     (EMPTY_STOCK_SNIPER, tex::Kind::Faint),
+    (WINGMAN_ICON, tex::Kind::Color),
+    (R99_ICON, tex::Kind::Color),
+    (FLATLINE_ICON, tex::Kind::Color),
+    (SENTINEL_ICON, tex::Kind::Color),
+    (KUNAI_ICON, tex::Kind::Color),
+    (GRAPPLE_ICON, tex::Kind::Color),
     // the frag grenade's `hud_icon` (U9; tools/apexhud/export_extra.py)
     (super::grenade::ICON, tex::Kind::Color),
 ];
@@ -108,7 +134,7 @@ struct Look {
     slots: &'static [&'static str],
 }
 
-const R301_SLOTS: [&str; 4] = EMPTY_SLOTS;
+const WINGMAN_SLOTS: [&str; 2] = [EMPTY_SLOTS[1], EMPTY_SLOTS[2]];
 const CHARGE_RIFLE_SLOTS: [&str; 2] = [EMPTY_SLOTS[2], EMPTY_STOCK_SNIPER];
 
 fn look(slot: u8) -> Look {
@@ -123,7 +149,7 @@ fn look(slot: u8) -> Look {
             mode: SINGLE_SHOT,
             slots: &CHARGE_RIFLE_SLOTS,
         }
-    } else {
+    } else if slot == 0 && crate::spike::weapons::primary_gun() == crate::spike::weapons::Gun::R301 {
         Look {
             name_key: "#WPN_RSPN101_SHORT",
             fallback: "R-301",
@@ -132,7 +158,51 @@ fn look(slot: u8) -> Look {
             ammo_fallback: [180, 123, 68],
             badge: AMMO_BADGE,
             mode: FIRE_MODE,
-            slots: &R301_SLOTS,
+            slots: &EMPTY_SLOTS,
+        }
+    } else if slot == 0 && crate::spike::weapons::primary_gun() == crate::spike::weapons::Gun::R99 {
+        Look {
+            name_key: "#WPN_R97_SHORT",
+            fallback: "R-99",
+            icon: R99_ICON,
+            ammo_key: "AMMO_SMALL_COLOR",
+            ammo_fallback: [180, 123, 68],
+            badge: AMMO_BADGE,
+            mode: FIRE_MODE,
+            slots: &R99_SLOTS,
+        }
+    } else if slot == 0 && crate::spike::weapons::primary_gun() == crate::spike::weapons::Gun::Flatline {
+        Look {
+            name_key: "#WPN_VINSON_SHORT",
+            fallback: "Flatline",
+            icon: FLATLINE_ICON,
+            ammo_key: "AMMO_HEAVY_COLOR",
+            ammo_fallback: [86, 160, 128],
+            badge: AMMO_BADGE,
+            mode: FIRE_MODE,
+            slots: &EMPTY_SLOTS,
+        }
+    } else if slot == 0 && crate::spike::weapons::primary_gun() == crate::spike::weapons::Gun::Sentinel {
+        Look {
+            name_key: "#WPN_SENTINEL_SHORT",
+            fallback: "Sentinel",
+            icon: SENTINEL_ICON,
+            ammo_key: "AMMO_SNIPER_COLOR",
+            ammo_fallback: [110, 95, 206],
+            badge: SNIPER_BADGE,
+            mode: FIRE_MODE,
+            slots: &CHARGE_RIFLE_SLOTS,
+        }
+    } else {
+        Look {
+            name_key: "#WPN_WINGMAN_SHORT",
+            fallback: "Wingman",
+            icon: WINGMAN_ICON,
+            ammo_key: "AMMO_SNIPER_COLOR",
+            ammo_fallback: [110, 95, 206],
+            badge: SNIPER_BADGE,
+            mode: SINGLE_SHOT,
+            slots: &WINGMAN_SLOTS,
         }
     }
 }
@@ -417,10 +487,15 @@ fn outlined_bar(dl: &DrawListMut, a: [f32; 2], b: [f32; 2], col: [f32; 4], t: f3
     dl.add_line(a, b, col).thickness(t).build();
 }
 
-/// The player's character name from the save (the HUD's player name; not Fuse's).
+/// The HUD's player name: ini `player_name` when set, else the character name from the save (not
+/// Fuse's).
 fn player_name() -> Option<String> {
     static NAME: Mutex<Option<String>> = Mutex::new(None);
     if let Some(n) = NAME.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        return Some(n);
+    }
+    if let Some(n) = crate::paths::config("player_name").filter(|n| !n.is_empty()) {
+        *NAME.lock().unwrap_or_else(|e| e.into_inner()) = Some(n.clone());
         return Some(n);
     }
     let wcm = unsafe { WorldChrMan::instance() }.ok()?;
@@ -479,12 +554,73 @@ pub fn draw(dl: &DrawListMut, pack: &Pack, size: [f32; 2], fov: f32) {
     }
     boss_bar(&Pen::new(dl, size, Anchor::BottomCenter), pack, &c);
     let top_right = Pen::new(dl, size, Anchor::TopRight);
+    streak_badge(&top_right, &c);
     match_stats(&top_right, &c);
     kill_feed(&top_right, pack);
     damage_indicators(dl, pack, size);
     knock_message(dl, pack, size, &c);
+    if let Some(w) = spike::weapons::wheel() {
+        weapon_wheel(&Pen::new(dl, size, Anchor::TopCenter), pack, w.hovered, &c);
+    }
     let Some(g) = gun else { return };
     aim(dl, pack, size, fov, &g, &c);
+}
+
+/// The weapon wheel (Tab held: spike/weapons.rs): a sector each round the screen's centre, clockwise
+/// from the top the R-301, the R-99, the Wingman, the Flatline and the Charge Rifle, each with its
+/// icon and name; the one pointed at bright, the one in hand marked.
+/// Then Q's two abilities (the stim, Pathfinder's grapple).
+fn weapon_wheel(p: &Pen, pack: &Pack, hovered: Option<usize>, c: &Colors) {
+    use spike::weapons::{Gun, Slot};
+    let (cx, cy) = (960.0, 540.0);
+    let (r0, r1) = (110.0, 260.0);
+    let held = match spike::weapons::active() {
+        Slot::ChargeRifle => 5,
+        // the kunai is not on the wheel: slot 1's gun marked
+        Slot::R301 | Slot::Melee => match spike::weapons::primary_gun() {
+            Gun::R301 => 0,
+            Gun::R99 => 1,
+            Gun::Wingman => 2,
+            Gun::Flatline => 3,
+            Gun::Sentinel => 4,
+        },
+    };
+    let icons = ["weapon_slot", R99_ICON, WINGMAN_ICON, FLATLINE_ICON, SENTINEL_ICON, CHARGE_RIFLE_ICON, "tactical", GRAPPLE_ICON];
+    // Q's ability in use marked as well
+    let q_held = match spike::grapple::q_ability() {
+        spike::grapple::QAbility::Stim => 6,
+        spike::grapple::QAbility::Grapple => 7,
+    };
+    let n = spike::weapons::WHEEL.len();
+    let sector = std::f32::consts::TAU / n as f32;
+    for (k, (_, name)) in spike::weapons::WHEEL.iter().enumerate() {
+        // the sector's middle, clockwise from the top
+        let mid = k as f32 * sector;
+        let at = |a: f32, r: f32| [cx + r * a.sin(), cy - r * a.cos()];
+        let steps = 12;
+        let span = sector - 0.06;
+        let a0 = mid - span * 0.5;
+        let on = hovered == Some(k);
+        let fill = if on { alpha(c.white, 0.35) } else { alpha(c.panel, 0.75) };
+        for i in 0..steps {
+            let (u, v) = (a0 + span * i as f32 / steps as f32, a0 + span * (i + 1) as f32 / steps as f32);
+            p.poly(&[at(u, r0), at(u, r1), at(v, r1), at(v, r0)], fill);
+        }
+        let rim = if on { c.white } else { c.rim };
+        let outer: Vec<[f32; 2]> = (0..=steps).map(|i| at(a0 + span * i as f32 / steps as f32, r1)).collect();
+        for w in outer.windows(2) {
+            p.line(w[0], w[1], rim, if on { 3.0 } else { 1.5 });
+        }
+        let centre = at(mid, (r0 + r1) * 0.5);
+        let ability = matches!(spike::weapons::WHEEL[k].0, spike::weapons::Pick::Q(_));
+        let rect = if ability { [centre[0] - 19.0, centre[1] - 44.0, 38.0, 49.0] } else { [centre[0] - 55.0, centre[1] - 34.0, 110.0, 44.0] };
+        p.image(icons[k], rect, if on { 1.0 } else { 0.8 });
+        let label = if k == 0 { pack.weapon_name.as_str() } else { name };
+        p.text(Face::Bold, label, centre[0], centre[1] + 22.0, 13.0, if on { c.white } else { alpha(c.white, 0.75) }, Align::Center);
+        if k == held || k == q_held {
+            p.text(Face::Body, "IN HAND", centre[0], centre[1] + 46.0, 10.0, alpha(c.white, 0.6), Align::Center);
+        }
+    }
 }
 
 /// Inside a convex polygon (either winding)?
@@ -518,17 +654,39 @@ fn dots(p: &Pen, poly: &[[f32; 2]], col: [f32; 4]) {
     }
 }
 
+/// The streak badges, Apex's rank emblems in the user's own pictures (`rank/<name>.png` in or beside
+/// `hud_dir`).
+pub const RANK_BADGES: [&str; 3] = ["D1", "M1", "P1"];
+
+/// Top right, where Apex shows the ranked badge (the user's 2026-10-10 ask, sized and placed after
+/// their Apex screenshot): a kill-streak counter, D1 for 0-3 kills in the last minute, M1 for 4-10,
+/// P1 above 10, the count under it.
+fn streak_badge(p: &Pen, c: &Colors) {
+    let n = spike::stats::recent_kills();
+    let badge = RANK_BADGES[match n {
+        0..=3 => 0,
+        4..=10 => 1,
+        _ => 2,
+    }];
+    const RIGHT: f32 = 1906.0;
+    const TOP: f32 = 6.0;
+    const SIZE: f32 = 104.0;
+    p.image(badge, [RIGHT - SIZE, TOP, SIZE, SIZE], 1.0);
+    p.text(Face::Bold, &format!("{n} KILLS"), RIGHT - SIZE * 0.5, TOP + SIZE + 3.0, 13.0, c.white, Align::Center);
+}
+
 /// Top right, as the screenshot's match stats: kills (skull) and damage dealt, each in a slanted
 /// dotted cell. The screenshot's assists and knockdowns cells are left out: Elden Ring has
 /// neither (D-016: nothing made up). Positions measured off the screenshot (the kills cell moved
 /// next to the damage cell, where the two left out were).
 fn match_stats(p: &Pen, c: &Colors) {
     let (kills, damage) = spike::stats::totals();
-    const TOP: f32 = 82.0;
+    // under the streak badge's middle, left of it (moved 2026-10-10 from 82, x 13 to the right)
+    const TOP: f32 = 96.0;
     const H: f32 = 22.0;
     const LEAN: f32 = -0.78;
     let fill = rgb(28, 44, 58, 0.62);
-    for (x, w, icon, value, mask) in [(1606.0, 67.0, SKULL, kills.to_string(), false), (1685.0, 88.0, DEALT, format!("{damage:.0}"), true)] {
+    for (x, w, icon, value, mask) in [(1619.0, 67.0, SKULL, kills.to_string(), false), (1698.0, 88.0, DEALT, format!("{damage:.0}"), true)] {
         let q = cell(x, TOP, w, H, LEAN);
         p.poly(&q, fill);
         dots(p, &q, rgb(150, 170, 185, 0.16));
@@ -562,7 +720,7 @@ fn kill_feed(p: &Pen, pack: &Pack) {
     const HEAD: f32 = 18.0;
     for (i, (age, victim, head, weapon)) in lines.into_iter().enumerate() {
         let a = (1.0 - (age - (spike::stats::FEED_SECONDS - 0.5)).max(0.0) / 0.5).clamp(0.0, 1.0);
-        let y = 196.0 + i as f32 * (H + 4.0);
+        let y = 206.0 + i as f32 * (H + 4.0);
         let victim_w = victim.as_deref().map_or(0.0, |v| font::width(Face::Body, v, TEXT));
         let me_w = font::width(Face::Body, &me, TEXT);
         let total = 2.0 * GAP + me_w + GAP + GUN + if head { GAP + HEAD } else { 0.0 } + if victim.is_some() { GAP + victim_w } else { 0.0 };
@@ -581,6 +739,11 @@ fn kill_feed(p: &Pen, pack: &Pack) {
         if weapon == 2 {
             let s = H - 6.0;
             p.image(super::grenade::ICON, [x - (GUN + s) * 0.5, y + 3.0, s, s], a);
+        } else if weapon == 3 {
+            // the kunai's picture (98 x 112) on its side would be too small: upright, as tall as the line
+            let h = H - 4.0;
+            let w = h * 98.0 / 112.0;
+            p.image(KUNAI_ICON, [x - (GUN + w) * 0.5, y + 2.0, w, h], a);
         } else {
             p.image(look(weapon).icon, [x - GUN, y + 3.0, GUN, H - 6.0], a);
         }
@@ -748,7 +911,9 @@ fn player_frame(p: &Pen, pack: &Pack, hp: f32, c: &Colors) {
     p.image(BATTERY_ICON, centred(&q, 23.0, 44.0), 1.0);
     p.text(Face::Bold, "∞", 534.0, 1010.0, 14.0, alpha(c.white, 0.95), Align::Right);
     key_cap(p, [505.0, 1035.0, 20.0, 18.0], "4");
-    let cooling = !state.tactical_active && state.tactical_left > 0.0;
+    // Q's ability: the stim, or the grapple the weapon wheel picked (no cooldown: grapple.rs)
+    let grapple = spike::grapple::q_ability() == spike::grapple::QAbility::Grapple;
+    let cooling = !grapple && !state.tactical_active && state.tactical_left > 0.0;
     let q = slot(560.0);
     p.poly(&q, rgb(34, 33, 34, 0.7));
     dots(p, &q, rgb(150, 150, 150, 0.12));
@@ -756,7 +921,12 @@ fn player_frame(p: &Pen, pack: &Pack, hp: f32, c: &Colors) {
         p.poly(&q, [0.0, 0.0, 0.0, 0.45]);
     }
     p.outline(&q, alpha(c.rim, if cooling { 0.45 } else { 0.8 }), 1.5);
-    p.image("tactical", [570.0, 979.0, 62.0, 44.0], if cooling { 0.4 } else { 1.0 });
+    if grapple {
+        // (its icon is 252 x 324)
+        p.image(GRAPPLE_ICON, centred(&q, 34.0, 44.0), 1.0);
+    } else {
+        p.image("tactical", [570.0, 979.0, 62.0, 44.0], if cooling { 0.4 } else { 1.0 });
+    }
     if cooling {
         let n = format!("{:.0}", state.tactical_left.floor());
         let s = pack.strings.get("0xf90fd1bcaaced48a").filter(|s| !s.is_empty()).map_or(n.clone(), |f| f.replace("%s1", &n));
@@ -992,7 +1162,7 @@ fn aim(dl: &DrawListMut, pack: &Pack, size: [f32; 2], fov: f32, g: &spike::gun::
                 charge_arcs(dl, [cx, cy], k, charge, c);
             } else {
                 let gap = (g.spread_deg.to_radians().tan() / (fov * 0.5).tan() * size[1] * 0.5).max(x.min_gap_px * k);
-                for a in &x.angles_deg {
+                for a in hip_ticks(&x.angles_deg) {
                     // the pack's angles have y up (90° the top tick); the screen's y is down
                     let (s, co) = a.to_radians().sin_cos();
                     let (r0, r1) = (gap, gap + x.tick_px * k);
@@ -1024,6 +1194,19 @@ fn aim(dl: &DrawListMut, pack: &Pack, size: [f32; 2], fov: f32, g: &spike::gun::
     }
 
     damage_numbers(dl, pack, size, c);
+}
+
+/// The hip crosshair's ticks of slot 1's gun, as its retail `RUI_CrosshairData` names its RUI:
+/// R-301 `ui/crosshair_tri` (the pack's three, measured on the user's R5R video), R-99 and Wingman
+/// `ui/crosshair_plus`, Sentinel `ui/crosshair_plus_dot` (four: up, left, down, right; the dot as
+/// always), Flatline `ui/crosshair_alternator` (its RUI is not decoded: the plus stands in, 推断).
+/// The ticks' lengths, widths and gap rule are the R-301's for all of them (推断).
+fn hip_ticks(tri: &[f32]) -> Vec<f32> {
+    use spike::weapons::Gun;
+    match spike::weapons::primary_gun() {
+        Gun::R301 => tri.to_vec(),
+        Gun::R99 | Gun::Wingman | Gun::Flatline | Gun::Sentinel => vec![0.0, 90.0, 180.0, 270.0],
+    }
 }
 
 /// U3: the Charge Rifle's crosshair round its dot (the user, 2026-10-06: "the left and right are its
