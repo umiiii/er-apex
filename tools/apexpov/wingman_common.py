@@ -2,6 +2,7 @@
 independent weapon branch `wm:` and carrier group 9 on part BD, appended to T022's pack and 998."""
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -14,6 +15,12 @@ PACK_ROOT=ROOT/'apex-data/pov/octane_wingman'
 MODEL_ROOT=ROOT/'er-data/s3/octane_pov_wingman'
 BASE_PACK=wc.PACK_ROOT/'fuse_pov.anim'
 BASE_MODEL=wc.MODEL_ROOT
+# The default models (retail `r99_base_v`, `flatline_base_v`: every Apex install has them) unless
+# ERAPEX_SKIN_MODELS=1 (export-assets.ps1 -SkinModels): then the R-99's Cutting Edge and the
+# Flatline's Teal Zeal, the user's 2026-10-09 picks, which `--r99-skin` / `--flatline-skin` texture.
+SKIN_MODELS=os.environ.get('ERAPEX_SKIN_MODELS','')=='1'
+
+
 def _config(key,assets,part,group,model_relative,rig_relative,stem,meshes,owners,carriers,note):
  c=dict(key=key,assets=ROOT/assets,part=part,group=group,model_relative=model_relative,rig_relative=rig_relative,stem=stem,meshes=meshes,owners=owners,carriers=carriers,note=note)
  c.update(model=c['assets']/('cast/'+model_relative+'_LOD0.cast'),rig=c['assets']/('cast/'+rig_relative+'.cast'),qc=c['assets']/('smd/'+rig_relative+'.qc'),model_qc=c['assets']/('smd/'+model_relative+'.qc'),metadata=c['assets']/('sequences/'+stem+'.json'))
@@ -31,13 +38,15 @@ CONFIGS={
  # the user's skin's, 2026-10-09) on the base rig's sequences: the frame, the magazine (the `clip`
  # bodygroup), detailD; detailC, the iron sights and the reactive fins (`def_lb_fin_*`, bones of the
  # reactive rig only) ride on them
- 'r9':_config('r9','apex-data/assets/r99_ascension','lg',10,'mdl/techart/mshop/weapons/class/smg/r99/r99_react_v20_ascension_v','animrig/techart/mshop/weapons/class/smg/r99/r99_base_v_animRig','r99_react_v20_ascension_v',('body_0_','clip_0_','sight_front_1_','sight_rear_1_'),('def_c_base','def_c_magazine','def_c_detailD'),('L_ThighTwist1','L_CalfTwist1','R_ThighTwist1'),'R-99'),
+ 'r9':_config('r9','apex-data/assets/r99_ascension','lg',10,'mdl/techart/mshop/weapons/class/smg/r99/r99_react_v20_ascension_v','animrig/techart/mshop/weapons/class/smg/r99/r99_base_v_animRig','r99_react_v20_ascension_v',('body_0_','clip_0_','sight_front_1_','sight_rear_1_'),('def_c_base','def_c_magazine','def_c_detailD'),('L_ThighTwist1','L_CalfTwist1','R_ThighTwist1'),'R-99') if SKIN_MODELS else
+     _config('r9','apex-data/assets/r99','lg',10,'mdl/techart/mshop/weapons/class/smg/r99/r99_base_v','animrig/techart/mshop/weapons/class/smg/r99/r99_base_v_animRig','r99_base_v',('body_0_','clip_0_','sight_front_1_','sight_rear_1_'),('def_c_base','def_c_magazine','def_c_detailD'),('L_ThighTwist1','L_CalfTwist1','R_ThighTwist1'),'R-99'),
  # Wraith's heirloom kunai (the holstered mode, 2026-10-09) on part LG's next free twist leaf: one
  # mesh, all of it on def_magazine (the knife; knife_base, its child, is not weighted)
  # the VK-47 Flatline (2026-10-09) on part LG's next free leaves: its Teal Zeal model (the legendary
  # latline_v20_trshunter_v) on the Flatline's rig ptpov_vinson: the frame, the magazine, the
  # top cover (def_front_top: the charging handle side); the release and the barrel ride on them
- 'fl':_config('fl','apex-data/assets/flatline','lg',12,'mdl/techart/mshop/weapons/class/assault/flatline/flatline_v20_trshunter_v','animrig/weapons/vinson/ptpov_vinson','flatline_v20_trshunter_v',('body_0_','sight_rear_on_1_','_0_'),('def_c_base','def_magazine','def_front_top'),('L_ThighTwist','L_CalfTwist','R_CalfTwist'),'Flatline'),
+ 'fl':_config('fl','apex-data/assets/flatline','lg',12,'mdl/techart/mshop/weapons/class/assault/flatline/flatline_v20_trshunter_v','animrig/weapons/vinson/ptpov_vinson','flatline_v20_trshunter_v',('body_0_','sight_rear_on_1_','_0_'),('def_c_base','def_magazine','def_front_top'),('L_ThighTwist','L_CalfTwist','R_CalfTwist'),'Flatline') if SKIN_MODELS else
+     _config('fl','apex-data/assets/flatline_base','lg',12,'mdl/techart/mshop/weapons/class/assault/flatline/flatline_base_v','animrig/weapons/vinson/ptpov_vinson','flatline_base_v',('body_0_','magazine_0_','sight_rear_on_1_'),('def_c_base','def_magazine','def_front_top'),('L_ThighTwist','L_CalfTwist','R_CalfTwist'),'Flatline'),
  # the Sentinel (2026-10-09) on part LG's last free leaves (the feet's: the controller writes them in
  # model space, the game's foot IK under them does not reach them): its base model, the frame, the
  # bolt, the magazine; the bullet, the second magazine, its clip and the charge bolts ride on them

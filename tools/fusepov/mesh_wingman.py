@@ -82,6 +82,9 @@ R99_SKIN={'dir':None}
 
 def r99_skin_paths(out):
  if R99_SKIN['dir'] is None:return {}
+ # its textures fit its skin model only (ERAPEX_SKIN_MODELS=1): the default model's UVs differ
+ if not wm.SKIN_MODELS:
+  print('R-99 skin ignored: the default model is used (export-assets.ps1 -SkinModels for the skin model)',flush=True);return {}
  import subprocess
  folder=Path(R99_SKIN['dir']);dest=out/'inputs/r99-skin';dest.mkdir(parents=True,exist_ok=True)
  found=sorted((p for p in folder.glob('*.dds') if 'COL' in p.name.upper()),key=lambda p:p.stat().st_size)
@@ -123,6 +126,9 @@ FLATLINE_SKIN={'dir':None}
 
 def flatline_skin_paths(out):
  if FLATLINE_SKIN['dir'] is None:return {}
+ # its textures fit its skin model only (ERAPEX_SKIN_MODELS=1): the default model's UVs differ
+ if not wm.SKIN_MODELS:
+  print('Flatline skin ignored: the default model is used (export-assets.ps1 -SkinModels for the skin model)',flush=True);return {}
  import subprocess
  folder=Path(FLATLINE_SKIN['dir']);paths={}
  for usage,tag in (('col','COL'),('spc','SPC')):
@@ -149,7 +155,7 @@ def texture_sources(key,meshes,out=None):
  materials=read(assets/'materials.json')['materials']
  skin=(skin_paths(out) if key=='wm' else r99_skin_paths(out) if key=='r9' else kunai_skin_paths(out) if key=='kn' else flatline_skin_paths(out) if key=='fl' else {}) if out is not None else {}
  # the skin goes on the weapon's main material (`<model>_main`)
- main={'wm':SKIN_MATERIAL,'kn':KUNAI_SKIN_MATERIAL,'fl':'flatline_lgnd_v20_trshunter_main'}.get(key) or Path(wm.CONFIGS[key]['stem']).name.removesuffix('_v')+'_main'
+ main={'wm':SKIN_MATERIAL,'kn':KUNAI_SKIN_MATERIAL,'fl':'flatline_lgnd_v20_trshunter_main' if wm.SKIN_MODELS else None}.get(key) or Path(wm.CONFIGS[key]['stem']).name.removesuffix('_v')+'_main'
  for mesh in meshes:
   mat=next(m for m in materials if m['guid']==f'{mesh.Material().Hash():016x}');paths={}
   for t in sorted(mat['textures'],key=lambda t:t['slot']):paths.setdefault(t['usage'].lstrip('_'),assets/next(p for p in t['files'] if p.endswith('.png')))

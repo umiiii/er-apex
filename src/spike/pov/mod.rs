@@ -112,7 +112,7 @@ const WM_MUZZLE: Xf = Xf { t: Vec3::new(0.0, 2.795_282, 9.549_05), r: MUZZLE.r }
 
 /// `muzzle_flash` on the R-99's `def_c_base` (retail `r99_base_v.qc` `$definebone`).
 const R9_MUZZLE: Xf = Xf { t: Vec3::new(0.0, 3.288_844, 17.839_268), r: MUZZLE.r };
-/// `muzzle_flash` on the Flatline's `def_c_base` (retail `flatline_v20_trshunter_v.qc` `$definebone`:
+/// `muzzle_flash` on the Flatline's `def_c_base` (retail `flatline_base_v.qc` and `flatline_v20_trshunter_v.qc` `$definebone`:
 /// on `def_barrel` (0 2.3622 16.1839), 0.039064 up and 4.496695 ahead of it).
 const FL_MUZZLE: Xf = Xf { t: Vec3::new(0.0, 2.401_264, 20.680_613), r: MUZZLE.r };
 /// `muzzle_flash` on the Sentinel's `def_c_base` (retail `sentinel_base_v.qc` `$definebone`).

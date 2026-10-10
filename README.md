@@ -12,10 +12,10 @@ Forked from [umiiii/er-apex](https://github.com/umiiii/er-apex). On top of it:
 
 **Weapons**
 
-- **Six guns**: the Wingman (in hand at the start), the R-99, the R-301, the VK-47 Flatline (its Teal Zeal skin model), the Sentinel and the Charge Rifle.
+- **Six guns**: the Wingman (in hand at the start), the R-99, the R-301, the VK-47 Flatline, the Sentinel and the Charge Rifle.
 - **Sentinel** (changed on purpose): automatic, a shot every 0.8 s with Apex's bolt action, 7 rounds, a round back into the magazine every 0.4 s (no reload), the amped shot's sound, every hit a headshot (70 x 1.8, the kill feed's headshot mark), and **homing rounds**: with an enemy in a cone straight ahead (60 m, 30° each side; the crosshair does not move), a shot is a glowing round that flies from the muzzle, curves after the enemy and hits it when it gets there (ini `homing`, `homing_range`, `homing_angle`, `homing_height`, `homing_speed`; the defaults are at the top of `src/spike/homing.rs`). Their first-person models, animations, sounds and HUD icons are all exported from your Apex install by `export-assets.ps1` step 8.
 - **Weapon wheel**: hold Tab, turn the view (or press 1-3) to pick a gun, let go to switch. Key 2 is still the Charge Rifle.
-- **The R-99 is the Cutting Edge model** (reactive skin model `r99_react_v20_ascension_v`), animated on the base R-99's rig.
+- **Default models and textures**: every gun uses its default model and textures, which every Apex install has. The R-99's Cutting Edge and the Flatline's Teal Zeal models are opt-in (`export-assets.ps1 -SkinModels`), and so are the skins below.
 - **Inspect**: key 5 plays the inspect of the gun in hand, with its sounds; a shot, aiming, a reload, a switch, sprint or an ability cuts it.
 - **Holstered mode**: key 3 puts the gun away and takes out Wraith's heirloom kunai (its first-person model and animations from your Apex install); you run a little faster (×1.1, ini `holster_speed`), the left mouse button swings it (30 damage up to 2 m), 5 plays its inspect (all with the kunai's sounds), and 3 again (or 1 / 2) brings the gun back. The HUD stays as it was.
 - **Wingman**: semi-auto, 8 rounds, 50 a shot, head ×1.5, reload 2.1 s, zoom 60°, Apex's view kick. **Charge Rifle**: 8 rounds.
@@ -263,14 +263,13 @@ python tools/retarget/bake_er_anim.py fuse_idle_rifle_ADS   # -> er-data\s4\fuse
 
 **8. The Wingman, the R-99, the Flatline, the Sentinel and the kunai (about 20 min; this fork)**
 
-The Wingman, the R-99, the R-99's Cutting Edge model and Wraith's heirloom kunai, from your Apex install like the steps before. `build_wingman.py` adds them to model 998 and its animation pack, on top of step 6's `octane_pov_weapons` stage, and takes the optional skins.
+The Wingman, the R-99, the Flatline, the Sentinel and Wraith's heirloom kunai, from your Apex install like the steps before, with their default models. `build_wingman.py` adds them to model 998 and its animation pack, on top of step 6's `octane_pov_weapons` stage, and takes the optional skins.
 
 ```powershell
 python tools/apexassets/wingman_assets.py
 python tools/apexassets/r99_assets.py
-python tools/apexassets/r99_ascension_assets.py       # Cutting Edge (r99_react_v20_ascension_v)
+python tools/apexassets/flatline_base_assets.py       # VK-47 Flatline (flatline_base_v)
 python tools/apexassets/kunai_assets.py               # Wraith's heirloom kunai (heirloom_wraith_v18_kunai_v)
-python tools/apexassets/flatline_assets.py            # VK-47 Flatline, Teal Zeal (flatline_v20_trshunter_v)
 python tools/apexassets/sentinel_assets.py            # Sentinel (sentinel_base_v)
 python tools/apexpov/bake_wingman.py                  # -> apex-data\pov\octane_wingman\fuse_pov.anim
 python tools/fusepov/build_wingman.py                 # -> er-data\s3\octane_pov_wingman (model 998); skins: see below
@@ -290,6 +289,18 @@ python tools/apexhud/export_wingman.py --legend octane --weapon grapple
 python tools/apexhud/custom_font.py                   # only with fonts in apex-data\fonts: -> apex-data\hud\custom_font
 ```
 
+#### Skin models (optional)
+
+`pwsh export-assets.ps1 -SkinModels` uses the R-99's Cutting Edge model (`r99_react_v20_ascension_v`) and the Flatline's Teal Zeal model (`flatline_v20_trshunter_v`) instead of the default ones, and makes the animation pack and model 998 again; run it without `-SkinModels` to go back. By hand: export them too and set `ERAPEX_SKIN_MODELS=1` for `bake_wingman.py` and `build_wingman.py`:
+
+```powershell
+python tools/apexassets/r99_ascension_assets.py
+python tools/apexassets/flatline_assets.py
+$env:ERAPEX_SKIN_MODELS = '1'
+python tools/apexpov/bake_wingman.py
+python tools/fusepov/build_wingman.py
+```
+
 #### Weapon skins (optional)
 
 Each folder you put in `apex-data\skins\` replaces that gun's textures (any other folder: `export-assets.ps1 -Skins <folder>`):
@@ -298,13 +309,14 @@ Each folder you put in `apex-data\skins\` replaces that gun's textures (any othe
 |---|---|---|
 | `apex-data\skins\wingman\` | `Wingman_Default_col.dds` (optional `_spc`, `_nml`, `_gls`; `.png` works too) | the Wingman's base material |
 | `apex-data\skins\chargerifle\` | `col\`, `nml\`, `gls\`, each with `.dds` files in several sizes such as `1024.dds`, `2048.dds`; the largest is used | the Charge Rifle's main material |
-| `apex-data\skins\r99\` | `<size> COL SPC.dds`, such as `2048 COL SPC.dds`; the largest is used | the R-99's albedo and specular |
+| `apex-data\skins\r99\` | `<size> COL SPC.dds`, such as `2048 COL SPC.dds`; the largest is used | the R-99's albedo and specular (Cutting Edge model: with `-SkinModels` only) |
+| `apex-data\skins\flatline\` | `*COL*.dds` and `*SPC*.dds` (optional `*AO*.dds`, its glow); the largest is used | the Flatline's albedo and specular (Teal Zeal model: with `-SkinModels` only) |
 | `apex-data\skins\kunai\` | `*_col.dds` and `*_spc.dds` (in subfolders too, such as `1024\P2020_Default_col.dds`); the largest is used | the kunai's albedo and specular |
 
 Run `pwsh export-assets.ps1` again after adding, changing or removing a skin folder: step 8 notices that the set of skins changed and makes model 998 again; the rest is skipped. By hand:
 
 ```powershell
-python tools/fusepov/build_wingman.py --skin apex-data\skins\wingman --cr-skin apex-data\skins\chargerifle --r99-skin apex-data\skins\r99 --kunai-skin apex-data\skins\kunai
+python tools/fusepov/build_wingman.py --skin apex-data\skins\wingman --cr-skin apex-data\skins\chargerifle --kunai-skin apex-data\skins\kunai
 ```
 
 Then start the game with `pwsh play.ps1`. `game.ps1 install -Legend octane` takes the last stage of each chain: 999 from `octane_gun`; 998, the material bundle and the animation pack from `octane_pov_wingman` (else `octane_pov_weapons` / `octane_weapons`); plus the base pose `fuse_er.anim` and the ground jump pad `padworld.json`. When a stage is incomplete, it uses the stage before it.

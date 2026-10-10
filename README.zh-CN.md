@@ -12,10 +12,10 @@
 
 **武器**
 
-- **六把枪**：Wingman（开局拿在手上）、R-99、R-301、平行步枪（青色热情皮肤模型）、哨兵、Charge Rifle。
+- **六把枪**：Wingman（开局拿在手上）、R-99、R-301、平行步枪、哨兵、Charge Rifle。
 - **哨兵**（特意改过）：全自动每 0.8 秒一发，带 Apex 拉栓动作，弹匣 7 发，每 0.4 秒自动补 1 发（不用换弹），用充能后的开火音效，每发命中都算爆头（70 × 1.8，击杀栏带爆头标记）；**子弹自动追踪**：面朝方向 60 米、左右各 30° 的锥形范围内有敌人时，开枪打出一发发光的追踪子弹，从枪口飞出、拐弯追着敌人飞，飞到才算命中，准星不会动（ini `homing`、`homing_range`、`homing_angle`、`homing_height`、`homing_speed` 可改，默认值写在 `src/spike/homing.rs` 开头）。第一人称模型、动画、音效、HUD 图标都由 `export-assets.ps1` 第 8 步从本机 Apex 导出。
 - **武器轮盘**：按住 Tab，转视角（或按 1～3）选枪，松开就换。按 2 仍是 Charge Rifle。
-- **R-99 用刀锋（Cutting Edge）模型**（进化皮肤模型 `r99_react_v20_ascension_v`），套在原版 R-99 的骨架上播放动画。
+- **默认模型和贴图**：所有枪都用默认模型和默认贴图，每个人的 Apex 里都有。R-99 的刀锋模型和平行步枪的青色热情模型需要手动开启（`export-assets.ps1 -SkinModels`），下面的皮肤也是可选的。
 - **检视动作**：按 5 播放手中武器的检视和音效，开火、开镜、换弹、切枪、冲刺或用技能会打断。
 - **收枪模式**：按 3 收起枪，换上恶灵的传家宝苦无（第一人称模型和动作都从本机 Apex 导出）；移速稍快（×1.1，ini `holster_speed`），鼠标左键挥刀（2 米内 30 伤害），5 播放检视（都带苦无音效），再按 3（或 1 / 2）切回枪。HUD 保持不变。
 - **Wingman**：半自动、8 发、单发 50、爆头 ×1.5、换弹 2.1 秒、开镜 60°，后坐力用 Apex 的数值。**Charge Rifle**：8 发。
@@ -263,14 +263,13 @@ python tools/retarget/bake_er_anim.py fuse_idle_rifle_ADS   # → er-data\s4\fus
 
 **8. Wingman、R-99、平行步枪、哨兵与苦无（约 20 分钟，本 fork 新增）**
 
-和前面几步一样，从本机 Apex 导出 Wingman、R-99、R-99 的刀锋模型和恶灵的传家宝苦无。`build_wingman.py` 在第 6 步 `octane_pov_weapons` 的基础上，把它们加进模型 998 和动画包，并套用可选的皮肤。
+和前面几步一样，从本机 Apex 导出 Wingman、R-99、平行步枪、哨兵和恶灵的传家宝苦无，都是默认模型。`build_wingman.py` 在第 6 步 `octane_pov_weapons` 的基础上，把它们加进模型 998 和动画包，并套用可选的皮肤。
 
 ```powershell
 python tools/apexassets/wingman_assets.py
 python tools/apexassets/r99_assets.py
-python tools/apexassets/r99_ascension_assets.py       # 刀锋（r99_react_v20_ascension_v）
+python tools/apexassets/flatline_base_assets.py       # 平行步枪（flatline_base_v）
 python tools/apexassets/kunai_assets.py               # 恶灵传家宝苦无（heirloom_wraith_v18_kunai_v）
-python tools/apexassets/flatline_assets.py            # 平行步枪，青色热情（flatline_v20_trshunter_v）
 python tools/apexassets/sentinel_assets.py            # 哨兵（sentinel_base_v）
 python tools/apexpov/bake_wingman.py                  # → apex-data\pov\octane_wingman\fuse_pov.anim
 python tools/fusepov/build_wingman.py                 # → er-data\s3\octane_pov_wingman（模型 998）；皮肤见下
@@ -290,6 +289,18 @@ python tools/apexhud/export_wingman.py --legend octane --weapon grapple
 python tools/apexhud/custom_font.py                   # 仅当 apex-data\fonts 里有字体：→ apex-data\hud\custom_font
 ```
 
+#### 皮肤模型（可选）
+
+`pwsh export-assets.ps1 -SkinModels` 会把 R-99 换成刀锋模型（`r99_react_v20_ascension_v`）、平行步枪换成青色热情模型（`flatline_v20_trshunter_v`），并重新生成动画包和模型 998；不带 `-SkinModels` 再运行一次就换回默认模型。手动执行时，多导出这两个模型，并给 `bake_wingman.py` 和 `build_wingman.py` 设置 `ERAPEX_SKIN_MODELS=1`：
+
+```powershell
+python tools/apexassets/r99_ascension_assets.py
+python tools/apexassets/flatline_assets.py
+$env:ERAPEX_SKIN_MODELS = '1'
+python tools/apexpov/bake_wingman.py
+python tools/fusepov/build_wingman.py
+```
+
 #### 武器皮肤（可选）
 
 `apex-data\skins\` 下放了哪个文件夹，就替换哪把枪的贴图（放在别处：`export-assets.ps1 -Skins <文件夹>`）：
@@ -298,13 +309,14 @@ python tools/apexhud/custom_font.py                   # 仅当 apex-data\fonts �
 |---|---|---|
 | `apex-data\skins\wingman\` | `Wingman_Default_col.dds`（可选 `_spc`、`_nml`、`_gls`；`.png` 也行） | Wingman 的基础材质 |
 | `apex-data\skins\chargerifle\` | `col\`、`nml\`、`gls\` 子文件夹，各含若干尺寸的 `.dds`，如 `1024.dds`、`2048.dds`，取最大的一张 | Charge Rifle 的主材质 |
-| `apex-data\skins\r99\` | `<尺寸> COL SPC.dds`，如 `2048 COL SPC.dds`，取最大的一张 | R-99 的颜色和高光 |
+| `apex-data\skins\r99\` | `<尺寸> COL SPC.dds`，如 `2048 COL SPC.dds`，取最大的一张 | R-99 的颜色和高光（刀锋模型：仅 `-SkinModels`） |
+| `apex-data\skins\flatline\` | `*COL*.dds` 和 `*SPC*.dds`（可选 `*AO*.dds` 发光层），取最大的一张 | 平行步枪的颜色和高光（青色热情模型：仅 `-SkinModels`） |
 | `apex-data\skins\kunai\` | `*_col.dds` 和 `*_spc.dds`（放在子文件夹里也行，如 `1024\P2020_Default_col.dds`），取最大的一张 | 苦无的颜色和高光 |
 
 添加、更换或删除皮肤文件夹后，再运行一次 `pwsh export-assets.ps1`：第 8 步发现皮肤变了，会重新生成模型 998，其余步骤跳过。也可以手动执行：
 
 ```powershell
-python tools/fusepov/build_wingman.py --skin apex-data\skins\wingman --cr-skin apex-data\skins\chargerifle --r99-skin apex-data\skins\r99 --kunai-skin apex-data\skins\kunai
+python tools/fusepov/build_wingman.py --skin apex-data\skins\wingman --cr-skin apex-data\skins\chargerifle --kunai-skin apex-data\skins\kunai
 ```
 
 全部完成后用 `pwsh play.ps1` 启动游戏。`game.ps1 install -Legend octane` 会取各链条最后一级的产物：999 用 `octane_gun`，998、材质包和动画包用 `octane_pov_wingman`（没有时用 `octane_pov_weapons` / `octane_weapons`），另外复制基础姿态 `fuse_er.anim` 和地上跳板 `padworld.json`。某一级不完整时退回上一级。
