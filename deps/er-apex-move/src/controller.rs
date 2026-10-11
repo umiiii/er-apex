@@ -1479,7 +1479,12 @@ impl Controller {
             let mut normal = hit.normal;
             // a low lump under the feet (a bone, a stone: Elden Ring's floors are full of them;
             // each one stopped him dead, 2026-10-10): ridden over as a walkable slope, not a wall
+            // (a face too steep to walk on, its contact above the feet: walkable ground and its
+            // creases are left as they were; riding them at the lump's angle stuck him at terrain
+            // edges, 2026-10-11)
             let low_lump = block_uphill_walls
+                && hit.surface_normal.y < self.slope_cos()
+                && hit.point.y - position.y > self.params.skin * 2.0
                 && hit.point.y - position.y <= self.params.step_height * LOW_LUMP_FRACTION
                 && horizontal(hit.normal).norm_squared() > 1.0e-8;
             if low_lump {
