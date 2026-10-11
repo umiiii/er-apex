@@ -294,7 +294,7 @@ pub fn update() {
                 now
             ));
             if !paths::flag("virtual_pad") {
-                input::VIRTUAL.store(false, std::sync::atomic::Ordering::Relaxed);
+                input::set_virtual(false);
             }
             Stage::Done
         }
@@ -304,7 +304,7 @@ pub fn update() {
                 input::hold(input::Synthetic { buttons: 0x0080, ..Default::default() }, 150);
                 log(format!("quickboot: done, {d:.2} m from the fog gate; {:.1} s after launch", now));
                 if !paths::flag("virtual_pad") {
-                    input::VIRTUAL.store(false, std::sync::atomic::Ordering::Relaxed);
+                    input::set_virtual(false);
                 }
                 Stage::Done
             }

@@ -39,10 +39,11 @@ pub fn file(name: &str) -> PathBuf {
 }
 
 /// `key = value` from er_apex.ini (lines starting with # or ; are comments). Read fresh on every
-/// call: developer switches can be flipped while the game runs.
+/// call: developer switches can be flipped while the game runs. A key set twice: the last one wins
+/// (play.ps1's settings come after the dev ini's).
 pub fn config(key: &str) -> Option<String> {
     let text = std::fs::read_to_string(file(CONFIG)).ok()?;
-    text.lines().find_map(|line| {
+    text.lines().rev().find_map(|line| {
         let line = line.trim();
         if line.starts_with('#') || line.starts_with(';') {
             return None;

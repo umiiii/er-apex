@@ -6,21 +6,24 @@
 //! with the over-the-shoulder camera they sit above their targets (camera.rs); the HP/FP/stamina
 //! bars are the hidden Tarnished's, not Fuse's.
 //!
-//! Seen in game (2026-10-03): `hud_state = HideAll` hides all of it (bars, equipment, compass,
+//! Seen in game (2026-10-03): `hud_state = HideAll` hid all of it (bars, equipment, compass,
 //! runes, enemy tags, lock-on dot); prompts and messages stay. Hiding single parts through the
 //! tag/equipment flags (`is_visible`, `enable_equip_hud`, before and after MenuMan) does nothing:
 //! the game rebuilds them inside MenuMan and hands them to Scaleform there.
 //!
 //! Seen in game (2026-10-04): with HideAll the game leaves the boss bar's name empty (it fills it
-//! in MenuMan only while the HUD shows); `hud_state` stays as set (the game changes it only when
-//! menus open and close). So while a boss's name is missing, the state goes back to Default just
-//! around MenuMan (WorldChrMan_PostPhysics -> GameFlowStep_Post) and the name is kept per boss.
+//! in MenuMan only while the HUD shows).
+//!
+//! Seen in game (2026-10-10): HideAll also hid the NPC dialogue. Since then the HUD is hidden by
+//! the game's own option (Display > HUD: off) instead, the player's setting put back when the
+//! Tarnished (F5) has the HUD again: the dialogue shows, the bars and tags do not (the user's
+//! test), and the boss names are filled in as usual.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
-use eldenring::cs::{CSFeManHudState, CSFeManImp, CSMenuManImp, WorldChrMan};
+use eldenring::cs::{CSFeManHudState, CSFeManImp, CSMenuManImp, GameDataMan, HudType, WorldChrMan};
 use fromsoftware_shared::FromStatic;
 
 use crate::{log, paths, state};
@@ -45,51 +48,46 @@ fn hidden() -> bool {
 
 /// Boss names seen so far, by the boss's handle (selector, block id).
 static NAMES: Mutex<Option<HashMap<(u32, i32), String>>> = Mutex::new(None);
-/// The HUD state was set back to Default for this MenuMan, to have it fill a boss's name.
-static PEEKING: AtomicBool = AtomicBool::new(false);
 
 fn key(h: &eldenring::cs::FieldInsHandle) -> (u32, i32) {
     (h.selector.0, h.block_id.0)
 }
 
-/// Before MenuMan (WorldChrMan_PostPhysics): the game's HUD off during play (menus switch to
-/// ShowAll / PopupMenu, left alone); on just for this MenuMan while a boss's name is missing.
+/// The player's own HUD option (Display > HUD) while we keep it off; None: not ours to put back.
+static SAVED_OPTION: Mutex<Option<HudType>> = Mutex::new(None);
+
+/// Before MenuMan (WorldChrMan_PostPhysics): the game's HUD option off during play, the player's
+/// own back for the Tarnished (F5) or with `fe hide off`. The option, not `hud_state = HideAll`:
+/// HideAll took the NPC dialogue with it (the user, 2026-10-10); with the option off the game
+/// keeps the dialogue, its prompts and messages, and still fills in the boss bars' names.
 pub fn before_menu() {
-    if !hidden() || !state::in_world() {
-        return;
-    }
-    let Ok(fe) = (unsafe { CSFeManImp::instance_mut() }) else { return };
-    let names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
-    let missing = fe.boss_health_displays.iter().any(|d| !d.field_ins_handle.is_empty() && !names.as_ref().is_some_and(|n| n.contains_key(&key(&d.field_ins_handle))));
-    if missing && fe.hud_state == CSFeManHudState::HideAll {
-        fe.hud_state = CSFeManHudState::Default;
-        PEEKING.store(true, Ordering::Relaxed);
-    } else if fe.hud_state == CSFeManHudState::Default {
-        fe.hud_state = CSFeManHudState::HideAll;
+    let Ok(g) = (unsafe { GameDataMan::instance_mut() }) else { return };
+    let mut saved = SAVED_OPTION.lock().unwrap_or_else(|e| e.into_inner());
+    if hidden() && state::in_world() {
+        if saved.is_none() {
+            *saved = Some(g.game_settings.hud_type);
+            log(format!("fe: game HUD option {:?} -> Off", g.game_settings.hud_type));
+        }
+        g.game_settings.hud_type = HudType::Off;
+    } else if let Some(t) = saved.take() {
+        g.game_settings.hud_type = t;
+        log(format!("fe: game HUD option back to {t:?}"));
     }
 }
 
-/// After MenuMan (GameFlowStep_Post), before Scaleform draws: keep the names it filled, HUD off.
+/// After MenuMan (GameFlowStep_Post): keep the boss names it filled in.
 pub fn after_menu() {
     if !hidden() || !state::in_world() {
         return;
     }
-    let Ok(fe) = (unsafe { CSFeManImp::instance_mut() }) else { return };
-    {
-        let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
-        let names = names.get_or_insert_with(HashMap::new);
-        for (d, t) in fe.boss_health_displays.iter().zip(fe.frontend_values.boss_list_tag_data.iter()) {
-            let name = t.chr_name.to_string();
-            if !d.field_ins_handle.is_empty() && !name.is_empty() {
-                if names.insert(key(&d.field_ins_handle), name.clone()).is_none() {
-                    log(format!("fe: boss name \"{name}\" (peeked {})", PEEKING.load(Ordering::Relaxed)));
-                }
-            }
+    let Ok(fe) = (unsafe { CSFeManImp::instance() }) else { return };
+    let mut names = NAMES.lock().unwrap_or_else(|e| e.into_inner());
+    let names = names.get_or_insert_with(HashMap::new);
+    for (d, t) in fe.boss_health_displays.iter().zip(fe.frontend_values.boss_list_tag_data.iter()) {
+        let name = t.chr_name.to_string();
+        if !d.field_ins_handle.is_empty() && !name.is_empty() && names.insert(key(&d.field_ins_handle), name.clone()).is_none() {
+            log(format!("fe: boss name \"{name}\""));
         }
-    }
-    PEEKING.store(false, Ordering::Relaxed);
-    if fe.hud_state == CSFeManHudState::Default {
-        fe.hud_state = CSFeManHudState::HideAll;
     }
 }
 
@@ -138,6 +136,23 @@ pub fn bosses() -> Vec<Boss> {
 
 /// Dev channel `fe [hide on|off]`: whether the game's HUD is hidden, its enemy tags and bosses.
 pub fn command(args: &[&str]) -> String {
+    // the game's own HUD option (Display > HUD: off / on / auto), for trying it in place of
+    // `hud_state` (the NPC dialogue: 2026-10-10)
+    if let ["option", v] = args {
+        let t = match *v {
+            "off" => HudType::Off,
+            "auto" => HudType::Auto,
+            _ => HudType::On,
+        };
+        match unsafe { GameDataMan::instance_mut() } {
+            Ok(g) => {
+                let was = g.game_settings.hud_type;
+                g.game_settings.hud_type = t;
+                log(format!("fe: game HUD option {was:?} -> {t:?}, subtitles {}", g.game_settings.show_subtitles));
+            }
+            Err(_) => return "no GameDataMan".into(),
+        }
+    }
     if let ["hide", v] = args {
         let on = matches!(*v, "on" | "1");
         HIDE.store(if on { 2 } else { 1 }, Ordering::Relaxed);

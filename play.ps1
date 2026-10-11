@@ -6,10 +6,11 @@ test save ER0000_fuse.sl2 (backed up to scratch\saves before each start).
   pwsh play.ps1             gun damage x3 and no Jump Pad cooldown (play-test values)
   pwsh play.ps1 -Season3    Season 3 values
   pwsh play.ps1 -NoSpawn    no soldiers at the grace
+  pwsh play.ps1 -Pad        play with a controller (by default the game sees no controller: keyboard and mouse prompts)
 
 Quit: pwsh tools/dev/game.ps1 stop
 #>
-param([switch]$Season3, [switch]$NoSpawn)
+param([switch]$Season3, [switch]$NoSpawn, [switch]$Pad)
 $ErrorActionPreference = 'Stop'
 $Root = $PSScriptRoot
 $Game = "$Root\tools\dev\game.ps1"
@@ -38,9 +39,10 @@ if ($save) {
     "test save backed up to $bak"
 }
 
-$set = "quickboot = 1;qb_place = first_step;kcc = 1;fuse_model = 1;lethal_guard = 1;gun = 1;first_person = 1;camera_shoulder = 1;hud_hide = 1" +
+$set = "quickboot = 1;qb_place = first_step;kcc = 1;fuse_model = 1;lethal_guard = 1;gun = 1;first_person = 1;camera_shoulder = 1;hud_hide = 1;virtual_pad = 0" +
     ";audio_dir = $Root\apex-data\audio;hud_dir = $Root\apex-data\hud\octane;npc_names = $Root\er-data\json\NpcName_zhocn.json"
 if (-not $Season3) { $set += ';gun_damage_mult = 3;pad_cooldown = 0' }
+if (-not $Pad) { $set += ';keyboard_only = 1' }
 $arena = Test-Path "$Root\er-data\test_arena\package"
 if ($arena) { & $Game install -Legend octane -Set $set } else { & $Game install -Legend octane -Set $set -NoArena }
 & $Game start

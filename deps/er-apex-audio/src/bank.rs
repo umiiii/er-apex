@@ -108,10 +108,10 @@ fn load_into(
     let root = dir.canonicalize()?;
     let manifest = Manifest::parse(&std::fs::read_to_string(root.join("manifest.json"))?)?;
     for (name, definition) in manifest.sounds {
+        // a sound two sets both export (the same event: the R-301's equip in the Charge Rifle's
+        // set and the Flatline's) keeps the first manifest's; one such name used to silence it all
         if bank.names.contains_key(&name) {
-            return Err(AudioError::Manifest(format!(
-                "sound {name} is in more than one manifest"
-            )));
+            continue;
         }
         let next_group = groups.len();
         let group = *groups.entry(definition.group.clone()).or_insert(next_group);
@@ -298,7 +298,9 @@ mod tests {
         assert_eq!(bank.clips.len(), 4);
         let (shot, pad) = (&bank.sounds[bank.names["shot"]], &bank.sounds[bank.names["pad"]]);
         assert_eq!((shot.group, shot.group_limit), (pad.group, 3));
-        assert!(load_bank(&[&a, &c], 48_000, 8, &limits).is_err());
+        // a name in two manifests: the first one's is kept
+        let both = load_bank(&[&a, &c], 48_000, 8, &limits).unwrap();
+        assert_eq!(both.names.len(), 2);
         assert!(load_bank(&[], 48_000, 8, &limits).is_err());
         std::fs::remove_dir_all(base).unwrap();
     }
