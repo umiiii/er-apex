@@ -853,3 +853,21 @@ fn small_lumps_do_not_stop_the_feet() {
         }
     }
 }
+
+#[test]
+fn walks_off_a_ledge_without_catching() {
+    // a platform 100 high ending at x 150, the floor below: walked and sprinted off its edge, he
+    // goes over it and down (the lump rule must not read the edge below the feet as a slope to
+    // climb: he stood stuck at terrain edges, 2026-10-11)
+    for (sprint, angle) in [(false, 0.0f32), (true, 0.0), (false, 40.0)] {
+        let mut t = floor(0.0);
+        t.extend(quad(Vec3::new(-1000.0, 100.0, -5000.0), Vec3::new(150.0, 100.0, -5000.0), Vec3::new(150.0, 100.0, 5000.0), Vec3::new(-1000.0, 100.0, 5000.0)));
+        t.extend(quad(Vec3::new(150.0, 0.0, -5000.0), Vec3::new(150.0, 100.0, -5000.0), Vec3::new(150.0, 100.0, 5000.0), Vec3::new(150.0, 0.0, 5000.0)));
+        let mut c = controller(&t, Vec3::new(50.0, 100.0, 0.0));
+        let a = angle.to_radians();
+        let dir = Vec3::new(a.cos(), 0.0, a.sin());
+        frames(&mut c, MoveInput { wish: dir, forward: dir, sprint, ..Default::default() }, 240);
+        assert!(c.state.position.x > 200.0 && c.state.position.y < 1.0, "ledge sprint {sprint} angle {angle}: {:?}", c.state);
+    }
+}
+

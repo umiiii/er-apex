@@ -208,6 +208,11 @@ struct Kcc {
     last_window: Vec<([Vec3; 3], u32, u32)>,
     /// Slow steps written to dev/ so far.
     slow_dumps: u32,
+    /// Since when the keys have pushed on the ground with almost no speed (blocked), and the dumps
+    /// of such spots so far (`kcc_blocked_<n>.txt` beside the log: the user's 2026-10-11 report of
+    /// feet caught near terrain edges)
+    blocked_since: Option<Instant>,
+    blocked_dumps: u32,
     /// Wall crossings written to dev/ so far.
     cross_dumps: u32,
     /// No ground in the last window: the game keeps the Tarnished until then (no window every
@@ -263,6 +268,8 @@ impl Kcc {
             log_at: None,
             last_window: Vec::new(),
             slow_dumps: 0,
+            blocked_since: None,
+            blocked_dumps: 0,
             cross_dumps: 0,
             retry_at: None,
             stuck_since: None,
@@ -836,6 +843,23 @@ pub fn update(dt: f32) {
             (k.origin + g3(&st.position) * MPU).y, v.y, st.eye_height,
             st.duck_fraction, st.sprint_fraction, st.eye_sprint_offset, st.slide_long_jump as u8, events_line(&events)
         ));
+    }
+    // blocked: on the ground, the keys held, under a fifth of a walk's speed for half a second:
+    // the window, the state before the step and the input, for er-apex-move's replay example
+    {
+        let push = Vec3::new(input.wish.x, 0.0, input.wish.z).length();
+        let v = g3(&st.velocity) * MPU;
+        let blocked = st.grounded && push > 0.5 && Vec3::new(v.x, 0.0, v.z).length() < 0.8;
+        if !blocked {
+            k.blocked_since = None;
+        } else if k.blocked_since.get_or_insert_with(Instant::now).elapsed().as_secs_f32() > 0.5 && k.blocked_dumps < 8 {
+            k.blocked_dumps += 1;
+            k.blocked_since = None;
+            let ticks = result.as_ref().map_or(0, |n| *n);
+            let name = format!("kcc_blocked_{}.txt", k.blocked_dumps);
+            let r = k.dump_to(&name, &before, &input, ticks, us);
+            log(format!("kcc: BLOCKED at {:.2?} pushing {:.2?}: {r}", k.origin + g3(&st.position) * MPU, g3(&input.wish)));
+        }
     }
     if us > 1000.0 && k.slow_dumps < 5 {
         k.slow_dumps += 1;
