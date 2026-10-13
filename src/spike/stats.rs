@@ -180,7 +180,7 @@ fn nearest_enemy(wcm: &WorldChrMan) -> Option<Vec3> {
         .iter()
         .flatten()
         .flat_map(|s| s.characters())
-        .filter(|c| crate::spike::body::is_enemy_team(c.team_type) && c.modules.data.hp > 0)
+        .filter(|c| crate::spike::body::is_enemy(c) && c.modules.data.hp > 0)
         .map(|c| {
             let q = c.modules.physics.position;
             Vec3::new(q.0, q.1, q.2)

@@ -89,7 +89,7 @@ fn debug_overlay(dl: &imgui::DrawListMut, size: [f32; 2]) {
         if let Ok(wcm) = unsafe { WorldChrMan::instance() } {
             for c in wcm.chr_sets.iter().flatten().flat_map(|s| s.characters()) {
                 let c: &eldenring::cs::ChrIns = c;
-                if !crate::spike::body::is_enemy_team(c.team_type) {
+                if !crate::spike::body::is_enemy(c) {
                     continue;
                 }
                 let ph = &c.modules.physics;

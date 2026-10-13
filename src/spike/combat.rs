@@ -171,7 +171,7 @@ fn nearest_enemy(range: f32) -> Option<(FieldInsHandle, u32)> {
     let mut best: Option<(f32, FieldInsHandle, u32)> = None;
     for c in wcm.chr_sets.iter().flatten().flat_map(|s| s.characters()) {
         let c: &ChrIns = c;
-        if !crate::spike::body::is_enemy_team(c.team_type) || c.modules.data.hp <= 0 || is_boss(c) {
+        if !crate::spike::body::is_enemy(c) || c.modules.data.hp <= 0 || is_boss(c) {
             continue;
         }
         let q = c.modules.physics.position;

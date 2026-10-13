@@ -1039,7 +1039,7 @@ fn enemies() -> Vec<(FieldInsHandle, u64, Vec3, f32, f32, i32)> {
     let mut out = Vec::new();
     for c in wcm.chr_sets.iter().flatten().flat_map(|s| s.characters()) {
         let c: &ChrIns = c;
-        if !crate::spike::body::is_enemy_team(c.team_type) || c.modules.data.hp <= 0 {
+        if !crate::spike::body::is_enemy(c) || c.modules.data.hp <= 0 {
             continue;
         }
         let (h, r) = super::body::cylinder(c);
