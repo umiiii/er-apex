@@ -325,6 +325,11 @@ impl Controller {
         self.refresh_pose();
         old
     }
+    /// The caller's speed multiplier from now on (the holstered mode's faster run: er-apex weapons.rs).
+    pub fn set_speed_multiplier(&mut self, m: f32) {
+        self.params.speed_multiplier = Some(m);
+    }
+
     pub fn params(&self) -> &MoveParams {
         &self.params
     }
@@ -405,6 +410,28 @@ impl Controller {
         self.apex_y = self.state.position.y + velocity.y.max(0.0).powi(2) / (2.0 * g);
         self.double_jump = double_jump;
         self.events.launched = true;
+        Ok(())
+    }
+
+    /// Sets the velocity for a pull (raw units/s; Pathfinder's grapple, the host steering it each
+    /// frame): off the ground, any slide ended, gravity scaled as a launch's (until landing), but no
+    /// launch event and no double jump.
+    pub fn pull(&mut self, velocity: Vec3, gravity_scale: f32) -> Result<(), ParamsError> {
+        if velocity.iter().any(|v| !v.is_finite()) || !(gravity_scale.is_finite() && gravity_scale > 0.0) {
+            return Err(ParamsError("invalid pull"));
+        }
+        self.state.velocity = velocity;
+        if self.state.grounded && velocity.y > 0.0 {
+            self.state.grounded = false;
+            self.state.ground_normal = None;
+        }
+        self.jumped_since_ground = true;
+        self.end_slide();
+        self.gravity_scale = gravity_scale;
+        self.launch_time = self.time;
+        let g = self.air_gravity();
+        self.apex_y = self.state.position.y + velocity.y.max(0.0).powi(2) / (2.0 * g);
+        self.double_jump = false;
         Ok(())
     }
 

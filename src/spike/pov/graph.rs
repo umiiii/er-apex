@@ -77,12 +77,31 @@ const fn def(name: &'static str, samples: &'static [(u32, f32)], axes: Axes, fad
 }
 
 /// The weapon whose sequences a graph plays (its clips: the R-301's `<name>_<k>`, the Charge
-/// Rifle's T022 `cr_<name>_<k>`).
+/// Rifle's T022 `cr_<name>_<k>`, the Wingman's `wm_<name>_<k>`: tools/apexpov/bake_wingman.py).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Weapon {
     #[default]
     R301,
     ChargeRifle,
+    /// the R-301's slot's other guns (the weapon wheel: weapons.rs `Gun`)
+    Wingman,
+    R99,
+    Flatline,
+    Sentinel,
+}
+
+impl Weapon {
+    /// The prefix of its clips in the pack (`<prefix><name>_<k>`).
+    pub fn prefix(self) -> &'static str {
+        match self {
+            Weapon::R301 => "",
+            Weapon::ChargeRifle => "cr_",
+            Weapon::Wingman => "wm_",
+            Weapon::R99 => "r9_",
+            Weapon::Flatline => "fl_",
+            Weapon::Sentinel => "sn_",
+        }
+    }
 }
 
 /// QC `ptpov_rspn101.qc` (T012): samples, blends, `fadein` / `fadeout`, `loop`; by `Seq as usize`.
@@ -125,6 +144,86 @@ static CR_DEFS: [SeqDef; 15] = [
     def("cr_wind_effect_layer", &[(1, 30.0), (16, 30.0)], Axes::Velocity, FADE, FADE, false),
 ];
 
+/// The Wingman's (retail `wingman_base_v_animRig.qc` through
+/// apex-data/pov/octane_wingman/wingman_sequences.json; QC fades as given, else FADE).
+static WM_DEFS: [SeqDef; 15] = [
+    def("wm_ads_in", &[(11, 30.0), (8, 30.0)], Axes::Crouch, 0.1, FADE, false),
+    def("wm_ads_out", &[(11, 30.0), (11, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("wm_idle", &[(191, 30.0), (121, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("wm_crouch", &[(191, 30.0), (121, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("wm_idle_to_crouch", &[(29, 30.0), (121, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("wm_crouch_to_idle", &[(29, 30.0), (121, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("wm_fire", &[(20, 30.0), (16, 30.0), (20, 30.0), (16, 30.0)], Axes::AdsCrouch, 0.05, FADE, false),
+    def("wm_jump", &[(31, 30.0), (22, 30.0), (31, 30.0), (22, 30.0)], Axes::AdsCrouch, FADE, 0.35, false),
+    def("wm_land", &[(19, 30.0), (19, 30.0), (19, 30.0), (19, 30.0)], Axes::AdsCrouch, 0.05, 0.35, false),
+    def("wm_sprint", &[(21, 36.0)], Axes::One, FADE, FADE, true),
+    def("wm_sprintraise", &[(11, 30.0)], Axes::One, FADE, FADE, false),
+    def("wm_sprintslide", &[(14, 30.0)], Axes::One, FADE, FADE, false),
+    def("wm_reload", &[(89, 30.0), (89, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("wm_reload_empty", &[(89, 30.0), (89, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("wm_wind_effect_layer", &[(1, 30.0), (16, 30.0)], Axes::Velocity, FADE, FADE, false),
+];
+
+/// The R-99's (retail `r99_base_v_animRig.qc` through apex-data/pov/octane_wingman/r99_sequences.json;
+/// its reloads are `reload_seq` / `reload_empty_seq`).
+static R9_DEFS: [SeqDef; 15] = [
+    def("r9_ads_in", &[(11, 30.0), (12, 30.0)], Axes::Crouch, 0.1, FADE, false),
+    def("r9_ads_out", &[(16, 30.0), (16, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("r9_idle", &[(191, 30.0), (191, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("r9_crouch", &[(191, 30.0), (191, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("r9_idle_to_crouch", &[(29, 30.0), (191, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("r9_crouch_to_idle", &[(29, 30.0), (191, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("r9_fire", &[(28, 30.0), (20, 30.0), (28, 30.0), (20, 30.0)], Axes::AdsCrouch, 0.05, FADE, false),
+    def("r9_jump", &[(31, 30.0), (22, 30.0), (31, 30.0), (22, 30.0)], Axes::AdsCrouch, FADE, 0.35, false),
+    def("r9_land", &[(19, 30.0), (19, 30.0), (19, 30.0), (19, 30.0)], Axes::AdsCrouch, 0.05, 0.35, false),
+    def("r9_sprint", &[(21, 36.0)], Axes::One, FADE, FADE, true),
+    def("r9_sprintraise", &[(11, 30.0)], Axes::One, FADE, FADE, false),
+    def("r9_sprintslide", &[(14, 30.0)], Axes::One, FADE, FADE, false),
+    def("r9_reload_seq", &[(73, 30.0), (73, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("r9_reload_empty_seq", &[(94, 30.0), (94, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("r9_wind_effect_layer", &[(1, 30.0), (16, 30.0)], Axes::Velocity, FADE, FADE, false),
+];
+
+/// The VK-47 Flatline's (retail `ptpov_vinson.qc` through
+/// apex-data/pov/octane_wingman/flatline_sequences.json; QC fades as given, else FADE).
+static FL_DEFS: [SeqDef; 15] = [
+    def("fl_ads_in", &[(12, 30.0), (12, 30.0)], Axes::Crouch, 0.1, FADE, false),
+    def("fl_ads_out", &[(16, 30.0), (16, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("fl_idle", &[(190, 30.0), (191, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("fl_crouch", &[(190, 30.0), (191, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("fl_idle_to_crouch", &[(29, 30.0), (191, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("fl_crouch_to_idle", &[(29, 30.0), (191, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("fl_fire", &[(27, 30.0), (11, 30.0), (27, 30.0), (11, 30.0)], Axes::AdsCrouch, 0.05, FADE, false),
+    def("fl_jump", &[(31, 30.0), (22, 30.0), (31, 30.0), (22, 30.0)], Axes::AdsCrouch, FADE, 0.35, false),
+    def("fl_land", &[(19, 30.0), (19, 30.0), (19, 30.0), (19, 30.0)], Axes::AdsCrouch, 0.05, 0.35, false),
+    def("fl_sprint", &[(21, 36.0)], Axes::One, FADE, FADE, true),
+    def("fl_sprintraise", &[(11, 30.0)], Axes::One, FADE, FADE, false),
+    def("fl_sprintslide", &[(14, 30.0)], Axes::One, FADE, FADE, false),
+    def("fl_reload", &[(70, 30.0), (73, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("fl_reload_empty", &[(94, 30.0), (94, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("fl_wind_effect_layer", &[(1, 30.0), (16, 30.0)], Axes::Velocity, FADE, FADE, false),
+];
+
+/// The Sentinel's (retail `sentinel_base_v_animRig.qc` through
+/// apex-data/pov/octane_wingman/sentinel_sequences.json; QC fades as given, else FADE).
+static SN_DEFS: [SeqDef; 15] = [
+    def("sn_ads_in", &[(11, 30.0), (11, 30.0)], Axes::Crouch, 0.1, FADE, false),
+    def("sn_ads_out", &[(11, 30.0), (11, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("sn_idle", &[(231, 30.0), (231, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("sn_crouch", &[(231, 30.0), (231, 30.0)], Axes::Ads, 0.3, 0.3, true),
+    def("sn_idle_to_crouch", &[(29, 30.0), (191, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("sn_crouch_to_idle", &[(29, 30.0), (191, 30.0)], Axes::Ads, FADE, FADE, false),
+    def("sn_fire", &[(33, 30.0), (33, 30.0), (32, 30.0), (33, 30.0)], Axes::AdsCrouch, 0.05, FADE, false),
+    def("sn_jump", &[(31, 30.0), (22, 30.0), (31, 30.0), (22, 30.0)], Axes::AdsCrouch, FADE, 0.35, false),
+    def("sn_land", &[(19, 30.0), (19, 30.0), (19, 30.0), (19, 30.0)], Axes::AdsCrouch, 0.05, 0.35, false),
+    def("sn_sprint", &[(21, 36.0)], Axes::One, FADE, FADE, true),
+    def("sn_sprintraise", &[(11, 30.0)], Axes::One, FADE, FADE, false),
+    def("sn_sprintslide", &[(14, 30.0)], Axes::One, FADE, FADE, false),
+    def("sn_reload", &[(113, 30.0), (113, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("sn_reload_empty", &[(131, 30.0), (131, 30.0)], Axes::Crouch, FADE, FADE, false),
+    def("sn_wind_effect_layer", &[(1, 30.0), (16, 30.0)], Axes::Velocity, FADE, FADE, false),
+];
+
 impl Seq {
     pub const ALL: [Seq; 15] = [
         Seq::AdsIn,
@@ -154,6 +253,10 @@ impl Seq {
         match w {
             Weapon::R301 => &DEFS[self as usize],
             Weapon::ChargeRifle => &CR_DEFS[self as usize],
+            Weapon::Wingman => &WM_DEFS[self as usize],
+            Weapon::R99 => &R9_DEFS[self as usize],
+            Weapon::Flatline => &FL_DEFS[self as usize],
+            Weapon::Sentinel => &SN_DEFS[self as usize],
         }
     }
 
@@ -361,6 +464,11 @@ impl Graph {
             params: Params::default(),
             w,
         }
+    }
+
+    /// The weapon whose sequences it plays.
+    pub fn weapon(&self) -> Weapon {
+        self.w
     }
 
     fn aim(&self) -> Seq {

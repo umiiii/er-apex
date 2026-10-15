@@ -54,8 +54,22 @@ fn run(dir: PathBuf, rx: mpsc::Receiver<Msg>) {
     let defender = dir.join("defender");
     // the frag grenade's (U9, `--set frag`)
     let frag = dir.join("frag_grenade");
+    // the Wingman's, in the R-301's place (`--set wingman`)
+    let wingman = dir.join("wingman");
+    // the R-99's (the weapon wheel; `--set r99`)
+    let r99 = dir.join("r99");
+    // the kunai's (the holstered mode; `--set kunai`)
+    let kunai = dir.join("kunai");
+    // the Flatline's (the weapon wheel; `--set flatline`)
+    let flatline = dir.join("flatline");
+    // the Sentinel's (`--set sentinel`)
+    let sentinel = dir.join("sentinel");
+    // a damaging hit's (the armour break, `--set hits`)
+    let hits = dir.join("hits");
+    // Pathfinder's grapple (`--set grapple`)
+    let grapple = dir.join("grapple");
     let mut dirs = vec![dir.as_path()];
-    for set in [&octane, &defender, &frag] {
+    for set in [&octane, &defender, &frag, &wingman, &r99, &kunai, &flatline, &sentinel, &hits, &grapple] {
         if set.join("manifest.json").exists() {
             dirs.push(set.as_path());
         }

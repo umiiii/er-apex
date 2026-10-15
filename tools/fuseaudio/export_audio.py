@@ -32,6 +32,14 @@ OCTANE_OUT = OUT / 'octane'
 DEFENDER_OUT = OUT / 'defender'
 # U9: the frag grenade's own folder (src/audio.rs loads it next to octane/)
 FRAG_OUT = OUT / 'frag_grenade'
+# the Wingman in the R-301's place
+WINGMAN_OUT = OUT / 'wingman'
+R99_OUT = OUT / 'r99'
+KUNAI_OUT = OUT / 'kunai'
+FLATLINE_OUT = OUT / 'flatline'
+SENTINEL_OUT = OUT / 'sentinel'
+HITS_OUT = OUT / 'hits'
+GRAPPLE_OUT = OUT / 'grapple'
 R5_SCRIPTS = s3record.R5_ROOT / 'platform/scripts'  # S3's scripts, as tools/s3_evidence.json recorded them
 GAME = gamedirs.apex()
 RSX = REPO / 'tools/apexassets/rsx_source/bin/Release_NoGui/rsx.exe'
@@ -376,6 +384,149 @@ def defender_references():
     return _refs_from_specs(specs)
 
 
+def wingman_references():
+    """The Wingman in the R-301's place: its retail weapon settings' sounds and its view model's QC
+    sounds (tools/apexassets/wingman_assets.py: the sequences' raw QC)."""
+    retail = REPO / 'apex-data/export/weapon/mp_weapon_wingman.txt'
+    qc = REPO / 'apex-data/assets/wingman/ability_sequences.json'
+    specs = [
+        ('Weapon_Wingman_Fire_1P', 'a shot', [(retail, 'fire_sound_2_player_1p')]),
+        ('Weapon_Wingman_ADS_In', 'aim in', [(retail, 'sound_zoom_in')]),
+        ('Weapon_Wingman_ADS_Out', 'aim out', [(retail, 'sound_zoom_out')]),
+        ('pistol_dryfire', 'an empty trigger', [(retail, 'sound_dryfire')]),
+        ('Weapon_Wingman_Equip', 'drawn (draw frame 0)', [(qc, 'draw')]),
+        ('weapon_wingman_firstpullout', 'drawn the first time (drawfirst frame 5)', [(qc, 'drawfirst')]),
+        ('Weapon_Wingman_UnEquip', 'put away (holster frame 0)', [(qc, 'holster')]),
+    ]
+    for event in ['Wpn_Wingman_Reload_Open', 'Wpn_Wingman_Reload_Eject', 'Wpn_Wingman_Reload_InsertMag',
+                  'Wpn_Wingman_Reload_Close', 'Wpn_Wingman_Reload_HandGrab']:
+        specs.append((event, 'reload (QC frame)', [(qc, 'reload'), (qc, 'reload_empty')]))
+    # the inspect key: the Wingman's `inspect` and the Charge Rifle's `inspect_basic` (T022's QC record)
+    for event in ['weapon_wingman_inspect_part01', 'weapon_wingman_inspect_part02', 'weapon_wingman_inspect_part03',
+                  'weapon_wingman_inspect_part04', 'weapon_wingman_inspect_end']:
+        specs.append((event, 'inspect (QC frame)', [(qc, 'inspect')]))
+    defender_qc = REPO / 'apex-data/assets/defender/ability_sequences.json'
+    for event in ['Weapon_Inspect_Sniper_Start', 'Weapon_Inspect_Sniper_Mid', 'Weapon_Inspect_Sniper_End']:
+        specs.append((event, 'the Charge Rifle\'s inspect (QC frame)', [(defender_qc, 'inspect_basic')]))
+    return _refs_from_specs(specs)
+
+
+def r99_references():
+    """The R-99 in slot 1 (the weapon wheel): its retail weapon settings' sounds and its view model's
+    QC sounds (tools/apexassets/r99_assets.py)."""
+    retail = REPO / 'apex-data/export/weapon/mp_weapon_r97.txt'
+    qc = REPO / 'apex-data/assets/r99/ability_sequences.json'
+    specs = [
+        ('Weapon_R97_Fire_First_1P', 'a burst starts', [(retail, 'burst_or_looping_fire_sound_start_1p')]),
+        ('Weapon_R97_Fire_Loop_1P', 'a burst goes on', [(retail, 'burst_or_looping_fire_sound_middle_1p')]),
+        ('Weapon_R97_Fire_Last_1P', 'a burst ends', [(retail, 'burst_or_looping_fire_sound_end_1p')]),
+        ('Weapon_R97_SecondShot_1P', 'a shot', [(retail, 'fire_sound_2_player_1p')]),
+        ('Weapon_R97_ADS_In', 'aim in', [(retail, 'sound_zoom_in')]),
+        ('Weapon_R97_ADS_Out', 'aim out', [(retail, 'sound_zoom_out')]),
+        ('assault_rifle_dryfire', 'an empty trigger', [(retail, 'sound_dryfire')]),
+        ('Weapon_R97_Equip', 'drawn (draw frame 0)', [(qc, 'draw')]),
+        ('Weapon_R97_UnEquip', 'put away (holster frame 0)', [(qc, 'holster')]),
+        ('Weapon_R97_Inspect', 'inspect (frame 0)', [(qc, 'inspect_new')]),
+    ]
+    for event in ['Wpn_R97_Reload_PullMag', 'Wpn_R97_Reload_InsertMag', 'Wpn_R97_Reload_HandGrab']:
+        specs.append((event, 'reload (QC frame)', [(qc, 'reload_seq'), (qc, 'reload_empty_seq')]))
+    for event in ['Wpn_R97_Reload_ChargeBack', 'Wpn_R97_Reload_ChargeForward']:
+        specs.append((event, 'empty reload (QC frame)', [(qc, 'reload_empty_seq')]))
+    return _refs_from_specs(specs)
+
+
+def grapple_references():
+    """Pathfinder's grapple (spike/grapple.rs): its fire, the hook's catch on a surface, the reel's
+    loop and the retract, named here (the ability's weapon settings name only its UI sounds)."""
+    events = ['pilot_grapple_fire', 'default_grapple_impact_1p_vs_3p', 'pilot_grapple_traverse_1p', 'pilot_grapple_retract_1p']
+    return [{'logical': e.lower(), 'requested_event': e, 'use': 'the grapple', 'input': 'stand-in', 'field': '', 'event': e, 'evidence': []} for e in events]
+
+
+def hits_references():
+    """A damaging hit's sound (the user's 2026-10-09 ask: Apex's armour-break): the shield break as
+    the attacker hears it (`humanshield_break_1p_vs_3p`), named here, not from a weapon's settings."""
+    events = ['humanshield_break_1p_vs_3p']
+    return [{'logical': e.lower(), 'requested_event': e, 'use': 'a hit that deals damage', 'input': 'stand-in', 'field': '', 'event': e, 'evidence': []} for e in events]
+
+
+def sentinel_references():
+    """The Sentinel in slot 1 (the weapon wheel): its amped shot (the shield-charged mod's
+    `fire_sound_1_player_1p`, the user's 2026-10-09 pick), its retail settings' other sounds and its
+    view model's QC sounds (tools/apexassets/sentinel_assets.py)."""
+    retail = REPO / 'apex-data/export/weapon/mp_weapon_sentinel.txt'
+    qc = REPO / 'apex-data/assets/sentinel/ability_sequences.json'
+    specs = [
+        ('weapon_sentinel_fire_alt_1p', 'a shot (amped)', [(retail, 'fire_sound_1_player_1p')]),
+        ('weapon_sentinel_ads_in', 'aim in', [(retail, 'sound_zoom_in')]),
+        ('weapon_sentinel_ads_out', 'aim out', [(retail, 'sound_zoom_out')]),
+        ('rifle_dryfire', 'an empty trigger', [(retail, 'sound_dryfire')]),
+        ('weapon_sentinel_draw', 'drawn (draw frame 0)', [(qc, 'draw')]),
+        ('weapon_sentinel_drawfirst', 'drawn the first time (drawfirst frame 0)', [(qc, 'drawfirst')]),
+        ('weapon_sentinel_holster', 'put away (holster frame 0)', [(qc, 'holster')]),
+    ]
+    for event in ['weapon_sentinel_boltback', 'weapon_sentinel_boltfront']:
+        specs.append((event, 'the bolt after a shot (rechamber QC frame)', [(qc, 'rechamber')]))
+    for event in ['weapon_sentinel_reload_gunup', 'weapon_sentinel_reload_magout', 'weapon_sentinel_reload_maggrab',
+                  'weapon_sentinel_reload_magslot', 'weapon_sentinel_reload_maginsert', 'weapon_sentinel_reload_gundown']:
+        specs.append((event, 'reload (QC frame)', [(qc, 'reload')]))
+    # the amped shot's own layers (its electric crack, `Wpn_Sentinel_1P_Fire_Alt_Electrical`, and
+    # the gun's report): sub-events the bank's `weapon_sentinel_fire_alt_1p` plays by the
+    # interior/exterior state, which its resolve leaves out; the outdoor one, named here
+    stand_ins = ['weapon_sentinel_fire_alt_1p_ExtBase', 'weapon_sentinel_fire_1p_ExtBase']
+    return _refs_from_specs(specs) + [{'logical': e.lower(), 'requested_event': e, 'use': 'a shot (amped), its own layers', 'input': 'stand-in', 'field': '', 'event': e, 'evidence': []} for e in stand_ins]
+
+
+def flatline_references():
+    """The VK-47 Flatline in slot 1 (the weapon wheel): its retail weapon settings' sounds and its view
+    model's QC sounds (tools/apexassets/flatline_assets.py)."""
+    retail = REPO / 'apex-data/export/weapon/mp_weapon_vinson.txt'
+    qc = REPO / 'apex-data/assets/flatline/ability_sequences.json'
+    specs = [
+        ('Weapon_Vinson_FirstShot_1P', 'a burst starts', [(retail, 'burst_or_looping_fire_sound_start_1p')]),
+        ('Weapon_Vinson_Loop_1P', 'a burst goes on', [(retail, 'burst_or_looping_fire_sound_middle_1p')]),
+        ('Weapon_Vinson_LoopEnd_1P', 'a burst ends', [(retail, 'burst_or_looping_fire_sound_end_1p')]),
+        ('Weapon_Vinson_SecondShot_1P', 'a shot', [(retail, 'fire_sound_2_player_1p')]),
+        ('Weapon_R101_ADS_In', 'aim in', [(retail, 'sound_zoom_in')]),
+        ('Weapon_R101_ADS_Out', 'aim out', [(retail, 'sound_zoom_out')]),
+        ('Weapon_Vinson_Trigger', 'an empty trigger', [(retail, 'sound_dryfire')]),
+        ('Weapon_R101_Equip', 'drawn (draw frame 0)', [(qc, 'draw')]),
+        ('Weapon_Vinson_FirstPullout', 'drawn the first time (drawfirst frame 6)', [(qc, 'drawfirst')]),
+        ('Weapon_R101_UnEquip', 'put away (holster frame 0)', [(qc, 'holster')]),
+        ('weapon_vinson_inspect_basicNew', 'inspect (frame 0)', [(qc, 'inspect_basic_new')]),
+    ]
+    for event in ['Weapon_Vinson_Reload_MagOut', 'Weapon_Vinson_Reload_MagIn']:
+        specs.append((event, 'reload (QC frame)', [(qc, 'reload'), (qc, 'reload_empty')]))
+    specs.append(('Weapon_Vinson_ReloadEmpty_Charge', 'empty reload (QC frame)', [(qc, 'reload_empty')]))
+    return _refs_from_specs(specs)
+
+
+def kunai_references():
+    """Wraith's heirloom kunai (the holstered mode, key 3): its view model's QC sounds
+    (tools/apexassets/kunai_assets.py)."""
+    qc = REPO / 'apex-data/assets/kunai/ability_sequences.json'
+    specs = [
+        ('Wraith_Mvmt_Kunai_Grip_Reverse2Standard', 'drawn (draw frame 0)', [(qc, 'draw')]),
+        ('Mvmt_Melee_Kunai_Swipe_1P', 'a swing (melee_idle_swipe frame 0)', [(qc, 'melee_idle_swipe')]),
+        ('effort_melee_1p', 'a swing\'s effort (melee_idle_swipe frame 2)', [(qc, 'melee_idle_swipe')]),
+    ]
+    for event in ['Wraith_Mvmt_Kunai_Inspect_Basic_P1', 'Wraith_Mvmt_Kunai_Inspect_Basic_P2', 'Wraith_Mvmt_Kunai_Inspect_Basic_P3']:
+        specs.append((event, 'inspect (QC frame)', [(qc, 'inspect')]))
+    for event in ['Wraith_Mvmt_Kunai_Inspect_Fly_P1', 'Wraith_Mvmt_Kunai_Inspect_Fly_P2', 'Wraith_Mvmt_Kunai_Inspect_Fly_P3', 'Wraith_Mvmt_Kunai_Inspect_Fly_P4']:
+        specs.append((event, 'inspect_fly (QC frame)', [(qc, 'inspect_fly')]))
+    specs.append(('Wraith_Mvmt_Kunai_FirstDraw', 'the sprint twirl (drawsprint_twirl frame 0)', [(qc, 'drawsprint_twirl')]))
+    for event in ['Wraith_Mvmt_Kunai_Inspect_Insignia_P1', 'Wraith_Mvmt_Kunai_Inspect_Insignia_P2', 'Wraith_Mvmt_Kunai_Inspect_Insignia_Charged', 'Wraith_Mvmt_Kunai_Inspect_Insignia_W_Appears']:
+        specs.append((event, 'inspect_insignia (QC frame)', [(qc, 'inspect_insignia')]))
+    refs = [r for r in _refs_from_specs(specs) if r['event']]
+    # the QC's swing sounds (`Mvmt_Melee_Kunai_Swipe_1P`, `effort_melee_1p`) are not in the local
+    # bank's event table: stand-ins of the same kind, named here (推断, not from the QC)
+    for event, use in [('Karambit_Mvmt_Melee_Idle_Swipe_1p', 'a swing (stand-in for Mvmt_Melee_Kunai_Swipe_1P)'),
+                       ('octane_effort_melee_1p', 'a swing\'s effort (Octane\'s, for effort_melee_1p)'),
+                       ('Generic_KunaiImpact_1p_vs_3p', 'a swing that hits'),
+                       ('Wraith_Mvmt_Kunai_Grip_Standard2Reverse', 'put away (the holster has no QC sound)')]:
+        refs.append({'logical': event.lower(), 'requested_event': event, 'use': use, 'input': 'stand-in', 'field': '', 'event': event, 'evidence': []})
+    return refs
+
+
 def _frag_evidence(path, input_path, field, literal, requested):
     """The lines of one input that name the event (frag_references)."""
     evidence = []
@@ -453,17 +604,24 @@ def frag_references():
 
 def set_root(root):
     """Read apex-data/ and the RSX build of another checkout (a worktree has neither)."""
-    global REPO, OUT, OCTANE_OUT, DEFENDER_OUT, FRAG_OUT, RSX
+    global REPO, OUT, OCTANE_OUT, DEFENDER_OUT, FRAG_OUT, WINGMAN_OUT, R99_OUT, KUNAI_OUT, FLATLINE_OUT, SENTINEL_OUT, HITS_OUT, GRAPPLE_OUT, RSX
     REPO = Path(root).resolve()
     OUT = REPO / 'apex-data/audio'
     OCTANE_OUT = OUT / 'octane'
     DEFENDER_OUT = OUT / 'defender'
     FRAG_OUT = OUT / 'frag_grenade'
+    WINGMAN_OUT = OUT / 'wingman'
+    R99_OUT = OUT / 'r99'
+    KUNAI_OUT = OUT / 'kunai'
+    FLATLINE_OUT = OUT / 'flatline'
+    SENTINEL_OUT = OUT / 'sentinel'
+    HITS_OUT = OUT / 'hits'
+    GRAPPLE_OUT = OUT / 'grapple'
     RSX = REPO / 'tools/apexassets/rsx_source/bin/Release_NoGui/rsx.exe'
 
 
 def output_directory(set_name, requested=None):
-    own = {'octane': OCTANE_OUT, 'defender': DEFENDER_OUT, 'frag': FRAG_OUT}.get(set_name)
+    own = {'octane': OCTANE_OUT, 'defender': DEFENDER_OUT, 'frag': FRAG_OUT, 'wingman': WINGMAN_OUT, 'r99': R99_OUT, 'kunai': KUNAI_OUT, 'flatline': FLATLINE_OUT, 'sentinel': SENTINEL_OUT, 'hits': HITS_OUT, 'grapple': GRAPPLE_OUT}.get(set_name)
     output = (requested if requested is not None else own if own is not None else OUT).resolve()
     if own is not None and not output.is_relative_to(own.resolve()):
         raise ValueError(f'The {set_name} output directory must stay inside {own}')
@@ -472,7 +630,7 @@ def output_directory(set_name, requested=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--set', choices=('r301', 'octane', 'defender', 'frag'), default='r301', help='Sound set (default: r301)')
+    parser.add_argument('--set', choices=('r301', 'octane', 'defender', 'frag', 'wingman', 'r99', 'kunai', 'flatline', 'sentinel', 'hits', 'grapple'), default='r301', help='Sound set (default: r301)')
     parser.add_argument('--output-dir', type=Path, help='Override output root; Octane stays inside audio/octane/, the Charge Rifle inside audio/defender/, frag inside audio/frag_grenade/')
     parser.add_argument('--root', type=Path, help="Checkout whose apex-data/ and RSX build are used (default: this script's)")
     parser.add_argument('--analyze-only', action='store_true', help='Verify/rebuild manifests from exported raw WAVs')
@@ -483,8 +641,8 @@ def main():
     out = output_directory(args.set, args.output_dir)
     # the ability-style sets (exact spellings, every play action kept, loop data): Octane's, the
     # Charge Rifle's, the frag's
-    octane = args.set in ('octane', 'defender', 'frag')
-    defender = args.set == 'defender'
+    octane = args.set in ('octane', 'defender', 'frag', 'wingman', 'r99', 'kunai', 'flatline', 'sentinel', 'hits', 'grapple')
+    defender = args.set in ('defender', 'wingman', 'r99', 'kunai', 'flatline', 'sentinel', 'hits', 'grapple')
     playback_folder = 'playback' if octane else 'r301'
     matrix = np.asarray(json.loads(args.matrix.read_text()) if args.matrix else DEFAULT_MATRIX, dtype=np.float64)
     if matrix.shape != (2, 6) or not np.isfinite(matrix).all():
@@ -493,7 +651,7 @@ def main():
     matrix /= np.maximum(1, np.abs(matrix).sum(axis=1))[:, None]
     for folder in (playback_folder, 'raw', 'logs', 'logs/rsx_runtime'):
         (out / folder).mkdir(parents=True, exist_ok=True)
-    refs = defender_references() if defender else frag_references() if args.set == 'frag' else octane_references() if octane else references()
+    refs = grapple_references() if args.set == 'grapple' else hits_references() if args.set == 'hits' else sentinel_references() if args.set == 'sentinel' else flatline_references() if args.set == 'flatline' else kunai_references() if args.set == 'kunai' else r99_references() if args.set == 'r99' else wingman_references() if args.set == 'wingman' else defender_references() if defender else frag_references() if args.set == 'frag' else octane_references() if octane else references()
     events = {r['asset_name'].lower(): r for r in csv.DictReader(
         (REPO / 'apex-data/assets/lists/audio_events.csv').open(encoding='utf8'))}
     available = {(r['asset_name'], r['file_name']): r for r in csv.DictReader(
@@ -579,7 +737,7 @@ def main():
         samples, info = read_wave(path, include_loop_data=octane)
         # Null is a real silent timing layer with explicit -96 dB action volume.
         silent = info['peak'] == 0
-        if silent and (octane or source['name'] != 'null_12s'):
+        if silent and source['name'] != 'null_12s':
             raise ValueError(f'Unexpected silent source: {path}')
         if info['sample_rate'] != source['sample_rate']:
             raise ValueError(f'Decoded rate does not match source record: {path}')
@@ -665,6 +823,13 @@ def main():
         manifest['scope'] = 'Octane ability events verified from local S3 scripts and retail settings; core = first play action; layers retain each play action; loops play once in this library'
     if args.set == 'frag':
         manifest['scope'] = 'U9 frag grenade events verified from local S3 weapon settings, impact tables and the view model QC; core = first play action; layers retain each play action; loops play once in this library'
+    if args.set == 'hits':
+        # the armour break's own shatter (its event's action lists three sources at equal weight,
+        # the other two a lock and a whoosh: 推断 they are picked one at a time; the user asked for
+        # the break, so only it plays)
+        for sound in sounds.values():
+            sound['variants'] = [v for v in sound['variants'] if 'markbreak' in v['name']] or sound['variants']
+        manifest['scope'] = "a damaging hit's sound: the armour break heard by the attacker, its shatter only"
     dump(out / 'manifest.json', manifest)
     dump(out / 'source_inventory.json', list(inventory.values()))
     lines = ['# T007 本机事件与音源映射', '',

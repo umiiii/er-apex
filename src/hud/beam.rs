@@ -254,7 +254,57 @@ fn warm_up(t: f32) -> f32 {
     1.0 - (1.0 - x) * (1.0 - x)
 }
 
+/// The Sentinel's shots (the user's 2026-10-10 ask: brighter): an amped blue flash at the muzzle
+/// for SN_FLASH s after each, and its homing rounds in flight (spike/homing.rs), a bright streak
+/// each, its tail along where it came from, a glow at its head (推断: Apex's amped Sentinel tracer
+/// is a particle system no local tool reads).
+const SN_FLASH: f32 = 0.15;
+
+pub fn draw_rounds(dl: &DrawListMut, size: [f32; 2]) {
+    let rounds = crate::spike::homing::rounds();
+    let flash = crate::spike::homing::since_shot().filter(|t| *t < SN_FLASH).map(|t| 1.0 - t / SN_FLASH);
+    if rounds.is_empty() && flash.is_none() {
+        return;
+    }
+    make_textures();
+    let k = size[1] / 1080.0;
+    let col = [0.45, 0.8, 1.0];
+    if let Some(a) = flash
+        && let Some(p) = muzzle().and_then(|m| project(m, size))
+    {
+        flare(dl, p, 190.0 * k, col, a * a);
+        soft(dl, p, 420.0 * k, rgba(col, 0.25 * a));
+    }
+    for (pos, dir) in rounds {
+        let tail = pos - dir * 4.0;
+        let Some((a, b)) = clip(tail, pos) else { continue };
+        let (Some(pa), Some(pb)) = (project(a, size), project(b, size)) else { continue };
+        let w = px(pos, 0.25, size).unwrap_or(0.0).clamp(6.0 * k, 70.0 * k);
+        band(dl, pa, pb, w * 0.5, w * 1.6, rgba(col, 0.45));
+        band(dl, pa, pb, w * 0.3, w, rgba(col, 0.8));
+        band(dl, pa, pb, w * 0.12, w * 0.45, rgba(CORE, 1.0));
+        flare(dl, pb, w * 3.0, col, 1.0);
+    }
+}
+
+/// Pathfinder's grapple cable (spike/grapple.rs): from his left hand (low left of the view) to the
+/// hook, a dark line with a thin light core; reeling back it shortens to the hand.
+pub fn draw_cable(dl: &DrawListMut, size: [f32; 2]) {
+    let Some((end, back)) = crate::spike::grapple::cable() else { return };
+    let Some((eye, fwd, right, up)) = view() else { return };
+    let hand = eye + fwd.normalize_or_zero() * 0.5 - right.normalize_or_zero() * 0.22 - up.normalize_or_zero() * 0.2;
+    let end = end + (hand - end) * back;
+    let Some((a, b)) = clip(hand, end) else { return };
+    let (Some(pa), Some(pb)) = (project(a, size), project(b, size)) else { return };
+    let k = size[1] / 1080.0;
+    dl.add_line(pa, pb, [0.08, 0.08, 0.09, 0.9]).thickness(4.0 * k).build();
+    dl.add_line(pa, pb, [0.75, 0.8, 0.85, 0.6]).thickness(1.2 * k).build();
+    dl.add_circle(pb, 4.0 * k, [0.2, 0.2, 0.22, 1.0]).filled(true).build();
+}
+
 pub fn draw(dl: &DrawListMut, size: [f32; 2]) {
+    draw_rounds(dl, size);
+    draw_cable(dl, size);
     let b = chargerifle::beams();
     if b.laser.is_none() && b.shot.is_none() && b.cancel.is_none() {
         return;

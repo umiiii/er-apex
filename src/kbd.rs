@@ -21,8 +21,9 @@ use crate::log;
 /// DirectInput scancodes the game must not see while the controller moves the legend:
 /// W A S D, Space, left/right Shift, left Ctrl, C; Q and Z, Octane's abilities (D-029; Q is the
 /// game's lock-on); 1 and 2, the weapon slots (U3); 4, the shield battery (D-032); G, the frag
-/// grenade (U9; the game's map key: the map stays in the menu); F5, the switch to the Tarnished and back (mode.rs)
-const HIDDEN: [u32; 16] = [0x11, 0x1E, 0x1F, 0x20, 0x39, 0x2A, 0x36, 0x1D, 0x2E, 0x10, 0x2C, 0x02, 0x03, 0x05, 0x22, 0x3F];
+/// grenade (U9; the game's map key: the map stays in the menu); 5, the weapon's inspect; Tab and 3,
+/// the weapon wheel; F5, the switch to the Tarnished and back (mode.rs)
+const HIDDEN: [u32; 19] = [0x11, 0x1E, 0x1F, 0x20, 0x39, 0x2A, 0x36, 0x1D, 0x2E, 0x10, 0x2C, 0x02, 0x03, 0x05, 0x22, 0x06, 0x0F, 0x04, 0x3F];
 
 const IID_IDIRECTINPUT8W: GUID = GUID::from_u128(0xBF798031_483A_4DA2_AA99_5D64ED369700);
 const GUID_SYSKEYBOARD: GUID = GUID::from_u128(0x6F1D2B61_D5A0_11CF_BFC7_444553540000);

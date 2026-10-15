@@ -10,6 +10,10 @@
 //! Vertically, glyphs sit on the baseline (the bottom of '0'), except descenders (g j p q y , ;:
 //! top at the x-height), dashes and the like (centred on the x-height) and quotes (top at the
 //! cap height).
+//!
+//! Your own fonts (tools/apexhud/custom_font.py, ini `hud_font`): digits and English letters (printable
+//! ASCII) of a face drawn from their atlas instead, everything else from Apex's; a glyph of the other
+//! atlas is scaled by the two atlases' '0' so the sizes match.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -50,30 +54,59 @@ struct Meta {
 #[derive(Deserialize)]
 struct MetaFont {
     font_index: u32,
+    /// the custom atlas's (custom_font.py: the font file's stem, lower case); Apex's meta has null
+    #[serde(default)]
+    name: Option<String>,
     /// [code point, texture index, x, y, w, h]
     unicode_to_texture_rect: Vec<[i64; 6]>,
 }
 
+/// An atlas's R channel.
+struct Atlas {
+    px: Vec<u8>,
+    w: usize,
+    h: usize,
+}
+
 struct Fonts {
-    /// The atlas's R channel.
-    atlas: Vec<u8>,
-    atlas_w: usize,
-    atlas_h: usize,
-    /// Face -> code point -> atlas rect (x, y, w, h).
+    /// Apex's atlas, then the custom one (if any)
+    atlases: Vec<Atlas>,
+    /// Face -> code point -> Apex's atlas rect (x, y, w, h).
     tables: HashMap<Face, HashMap<u32, [usize; 4]>>,
+    /// Face -> printable ASCII -> the custom atlas's rect (atlas 1).
+    custom: HashMap<Face, HashMap<u32, [usize; 4]>>,
+}
+
+/// The custom fonts to use: their atlas and meta (custom_font.py), and each face's font by name.
+pub struct Custom {
+    pub atlas: std::path::PathBuf,
+    pub meta: std::path::PathBuf,
+    pub faces: Vec<(Face, String)>,
 }
 
 static FONTS: Mutex<Option<Arc<Fonts>>> = Mutex::new(None);
 
-/// Loads the atlas and the faces' tables (face, font index) on a thread of its own.
-pub fn load(atlas: &Path, meta: &Path, faces: Vec<(Face, u32)>) {
+/// Loads the atlas and the faces' tables (face, font index) on a thread of its own; with `custom`,
+/// its fonts' digits and letters over the faces it names.
+pub fn load(atlas: &Path, meta: &Path, faces: Vec<(Face, u32)>, custom: Option<Custom>) {
     let (atlas, meta) = (atlas.to_path_buf(), meta.to_path_buf());
     std::thread::spawn(move || {
         let t0 = std::time::Instant::now();
         match read(&atlas, &meta, &faces) {
-            Ok(f) => {
+            Ok(mut f) => {
                 let counts: Vec<String> = faces.iter().map(|(face, i)| format!("{face:?} {i}: {}", f.tables[face].len())).collect();
-                log(format!("hud: font atlas {}x{}, glyphs {}, in {:.1} s", f.atlas_w, f.atlas_h, counts.join(", "), t0.elapsed().as_secs_f32()));
+                log(format!("hud: font atlas {}x{}, glyphs {}, in {:.1} s", f.atlases[0].w, f.atlases[0].h, counts.join(", "), t0.elapsed().as_secs_f32()));
+                if let Some(c) = custom {
+                    match read_custom(&c) {
+                        Ok((a, tables)) => {
+                            let names: Vec<String> = c.faces.iter().map(|(face, n)| format!("{face:?} {n}")).collect();
+                            log(format!("hud: custom fonts {}x{}: {}", a.w, a.h, names.join(", ")));
+                            f.atlases.push(a);
+                            f.custom = tables;
+                        }
+                        Err(e) => log(format!("hud: custom fonts not loaded ({e}); Apex's fonts only")),
+                    }
+                }
                 *FONTS.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(f));
             }
             Err(e) => log(format!("hud: fonts not loaded ({e}); Apex text stays blank")),
@@ -81,20 +114,40 @@ pub fn load(atlas: &Path, meta: &Path, faces: Vec<(Face, u32)>) {
     });
 }
 
+fn read_meta(meta: &Path) -> Result<Meta, String> {
+    serde_json::from_reader(std::io::BufReader::new(std::fs::File::open(meta).map_err(|e| format!("{}: {e}", meta.display()))?)).map_err(|e| format!("{}: {e}", meta.display()))
+}
+
+fn rects(font: &MetaFont) -> HashMap<u32, [usize; 4]> {
+    font.unicode_to_texture_rect
+        .iter()
+        .filter(|r| r[4] > 0 && r[5] > 0 && r[0] >= 0)
+        .map(|r| (r[0] as u32, [r[2] as usize, r[3] as usize, r[4] as usize, r[5] as usize]))
+        .collect()
+}
+
+/// The custom atlas and, per face, its font's printable ASCII.
+fn read_custom(c: &Custom) -> Result<(Atlas, HashMap<Face, HashMap<u32, [usize; 4]>>), String> {
+    let m = read_meta(&c.meta)?;
+    let mut tables = HashMap::new();
+    for (face, name) in &c.faces {
+        let font = m.fonts.iter().find(|f| f.name.as_deref() == Some(name.as_str())).ok_or_else(|| format!("no font {name} in {}", c.meta.display()))?;
+        tables.insert(*face, rects(font).into_iter().filter(|(cp, _)| (33..127).contains(cp)).collect());
+    }
+    Ok((read_atlas(&c.atlas)?, tables))
+}
+
 fn read(atlas: &Path, meta: &Path, faces: &[(Face, u32)]) -> Result<Fonts, String> {
-    let m: Meta = serde_json::from_reader(std::io::BufReader::new(std::fs::File::open(meta).map_err(|e| format!("{}: {e}", meta.display()))?))
-        .map_err(|e| format!("{}: {e}", meta.display()))?;
+    let m = read_meta(meta)?;
     let mut tables = HashMap::new();
     for &(face, index) in faces {
         let font = m.fonts.iter().find(|f| f.font_index == index).ok_or_else(|| format!("font {index} not in {}", meta.display()))?;
-        let table: HashMap<u32, [usize; 4]> = font
-            .unicode_to_texture_rect
-            .iter()
-            .filter(|r| r[4] > 0 && r[5] > 0 && r[0] >= 0)
-            .map(|r| (r[0] as u32, [r[2] as usize, r[3] as usize, r[4] as usize, r[5] as usize]))
-            .collect();
-        tables.insert(face, table);
+        tables.insert(face, rects(font));
     }
+    Ok(Fonts { atlases: vec![read_atlas(atlas)?], tables, custom: HashMap::new() })
+}
+
+fn read_atlas(atlas: &Path) -> Result<Atlas, String> {
     // row by row, keeping only R: the full RGBA image would be 128 MB
     let file = std::fs::File::open(atlas).map_err(|e| format!("{}: {e}", atlas.display()))?;
     let mut decoder = png::Decoder::new(std::io::BufReader::new(file));
@@ -112,7 +165,7 @@ fn read(atlas: &Path, meta: &Path, faces: &[(Face, u32)]) -> Result<Fonts, Strin
     if r.len() != w * h {
         return Err(format!("atlas: {} of {} pixels", r.len(), w * h));
     }
-    Ok(Fonts { atlas: r, atlas_w: w, atlas_h: h, tables })
+    Ok(Atlas { px: r, w, h })
 }
 
 /// Where a glyph sits vertically (see the module notes).
@@ -176,8 +229,8 @@ impl Cache {
         if let Some(r) = self.refs.get(&face) {
             return Some(*r);
         }
-        let ink_h = ink(fonts, face, '0' as u32)?.3 as f32;
-        let x_h = ink(fonts, face, 'x' as u32).map_or(ink_h * 0.72, |i| i.3 as f32);
+        let ink_h = ink(fonts, face, '0' as u32)?.4 as f32;
+        let x_h = ink(fonts, face, 'x' as u32).map_or(ink_h * 0.72, |i| i.4 as f32);
         let r = Reference { ink_h, x_h };
         self.refs.insert(face, r);
         Some(r)
@@ -194,7 +247,13 @@ impl Cache {
     }
 
     fn cut(&mut self, fonts: &Fonts, face: Face, cp: u32) -> Option<Glyph> {
-        let (ix, iy, iw, ih) = ink(fonts, face, cp)?;
+        let (src, ix, iy, iw, ih) = ink(fonts, face, cp)?;
+        // in the face's units (its '0'): a glyph of the other atlas scaled by the two atlases' '0'
+        let k = match (ink(fonts, face, '0' as u32), ink_in(fonts, face, src, '0' as u32)) {
+            (Some(r), Some(own)) if r.0 != src => r.4 as f32 / own.3.max(1) as f32,
+            _ => 1.0,
+        };
+        let a = &fonts.atlases[src];
         if self.x + iw + 1 > CACHE_W {
             self.x = 1;
             self.y += self.row_h + 1;
@@ -207,7 +266,7 @@ impl Cache {
         for j in 0..ih {
             for i in 0..iw {
                 let o = ((cy + j) * CACHE_W + cx + i) * 4;
-                self.rgba[o..o + 4].copy_from_slice(&[255, 255, 255, coverage(fonts.atlas[(iy + j) * fonts.atlas_w + ix + i])]);
+                self.rgba[o..o + 4].copy_from_slice(&[255, 255, 255, coverage(a.px[(iy + j) * a.w + ix + i])]);
             }
         }
         self.x += iw + 1;
@@ -217,23 +276,32 @@ impl Cache {
         Some(Glyph {
             uv0: [cx as f32 / tw, cy as f32 / th],
             uv1: [(cx + iw) as f32 / tw, (cy + ih) as f32 / th],
-            w: iw as f32,
-            h: ih as f32,
+            w: iw as f32 * k,
+            h: ih as f32 * k,
             place: char::from_u32(cp).map_or(Place::Baseline, place),
         })
     }
 }
 
-/// A glyph's ink in the atlas (x, y, w, h), after the coverage threshold.
-fn ink(fonts: &Fonts, face: Face, cp: u32) -> Option<(usize, usize, usize, usize)> {
-    let [x, y, w, h] = *fonts.tables.get(&face)?.get(&cp)?;
-    if x >= fonts.atlas_w || y >= fonts.atlas_h {
+/// A glyph's ink (atlas, x, y, w, h), after the coverage threshold: the custom font's for printable
+/// ASCII when the face has one, else Apex's.
+fn ink(fonts: &Fonts, face: Face, cp: u32) -> Option<(usize, usize, usize, usize, usize)> {
+    let src = usize::from(fonts.atlases.len() > 1 && fonts.custom.get(&face).is_some_and(|t| t.contains_key(&cp)));
+    ink_in(fonts, face, src, cp).map(|(x, y, w, h)| (src, x, y, w, h))
+}
+
+/// A glyph's ink (x, y, w, h) in one atlas (0 Apex's, 1 the custom one).
+fn ink_in(fonts: &Fonts, face: Face, src: usize, cp: u32) -> Option<(usize, usize, usize, usize)> {
+    let table = if src == 0 { &fonts.tables } else { &fonts.custom };
+    let [x, y, w, h] = *table.get(&face)?.get(&cp)?;
+    let a = fonts.atlases.get(src)?;
+    if x >= a.w || y >= a.h {
         return None;
     }
     // some cells at the atlas's edge run past it by a pixel or so (卫: y 3851 + h 54 of 3904 rows);
     // their ink is inside
-    let (w, h) = (w.min(fonts.atlas_w - x), h.min(fonts.atlas_h - y));
-    let on = |i: usize, j: usize| coverage(fonts.atlas[(y + j) * fonts.atlas_w + x + i]) > 0;
+    let (w, h) = (w.min(a.w - x), h.min(a.h - y));
+    let on = |i: usize, j: usize| coverage(a.px[(y + j) * a.w + x + i]) > 0;
     let cols: Vec<usize> = (0..w).filter(|&i| (0..h).any(|j| on(i, j))).collect();
     let rows: Vec<usize> = (0..h).filter(|&j| (0..w).any(|i| on(i, j))).collect();
     let (left, right, top, bottom) = (*cols.first()?, *cols.last()?, *rows.first()?, *rows.last()?);
